@@ -1,6 +1,6 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/reel.dart';
 
 class ReelCard extends StatefulWidget {
@@ -31,10 +31,17 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
   int? _selectedQuizAnswer;
   bool _quizAnswered = false;
   bool _showHeart = false;
+  bool _autoAdvance = true;
 
   late AnimationController _kenBurnsController;
   late AnimationController _heartController;
+  late AnimationController _slideTimerController;
+  late AnimationController _particleController;
   late Animation<double> _heartScale;
+
+  // Particles
+  late List<_Particle> _particles;
+  final _random = Random();
 
   static const List<List<Color>> _gradients = [
     [Color(0xFF667eea), Color(0xFF764ba2)],
@@ -62,7 +69,7 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
 
     _kenBurnsController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
+      duration: const Duration(seconds: 12),
     )..repeat(reverse: true);
 
     _heartController = AnimationController(
@@ -70,11 +77,42 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 800),
     );
     _heartScale = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.2), weight: 30),
-      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 20),
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.3), weight: 25),
+      TweenSequenceItem(tween: Tween(begin: 1.3, end: 0.9), weight: 15),
+      TweenSequenceItem(tween: Tween(begin: 0.9, end: 1.0), weight: 10),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 30),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 20),
     ]).animate(_heartController);
+
+    // Auto-advance timer (5 seconds per slide)
+    _slideTimerController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    );
+    _slideTimerController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && _autoAdvance && mounted) {
+        _advanceSlide();
+      }
+    });
+    _slideTimerController.forward();
+
+    // Particle system
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
+
+    _particles = List.generate(12, (_) => _Particle.random(_random));
+  }
+
+  void _advanceSlide() {
+    if (_currentSlide < _totalPages - 1) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+      );
+    }
+    // Don't auto-advance past the last slide or into quiz
   }
 
   @override
@@ -82,6 +120,8 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
     _pageController.dispose();
     _kenBurnsController.dispose();
     _heartController.dispose();
+    _slideTimerController.dispose();
+    _particleController.dispose();
     super.dispose();
   }
 
@@ -93,13 +133,22 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
     });
   }
 
+  void _onPageChanged(int i) {
+    setState(() {
+      _currentSlide = i;
+      _autoAdvance = i < widget.reel.slides.length; // Stop auto-advance on quiz
+    });
+    _slideTimerController.reset();
+    if (_autoAdvance) _slideTimerController.forward();
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onDoubleTap: _handleDoubleTap,
       child: Stack(
         children: [
-          // Background - gradient fallback
+          // Background gradient
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -114,7 +163,7 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
           PageView.builder(
             controller: _pageController,
             itemCount: _totalPages,
-            onPageChanged: (i) => setState(() => _currentSlide = i),
+            onPageChanged: _onPageChanged,
             itemBuilder: (context, index) {
               if (index < widget.reel.slides.length) {
                 return _buildSlide(widget.reel.slides[index], index);
@@ -124,12 +173,62 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
             },
           ),
 
+          // Floating particles
+          AnimatedBuilder(
+            animation: _particleController,
+            builder: (context, _) => Stack(
+              children: _buildParticles(),
+            ),
+          ),
+
+          // Auto-advance progress bar at top
+          if (_autoAdvance && _currentSlide < widget.reel.slides.length)
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: List.generate(_totalPages, (i) {
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: AnimatedBuilder(
+                            animation: _slideTimerController,
+                            builder: (context, _) {
+                              double progress;
+                              if (i < _currentSlide) {
+                                progress = 1.0;
+                              } else if (i == _currentSlide) {
+                                progress = _slideTimerController.value;
+                              } else {
+                                progress = 0.0;
+                              }
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  backgroundColor: Colors.white24,
+                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                  minHeight: 3,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            ),
+
           // Top bar
           Positioned(
             top: 0, left: 0, right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
                 child: Row(
                   children: [
                     Container(
@@ -252,7 +351,8 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
                 builder: (context, child) {
                   return Transform.scale(
                     scale: _heartScale.value,
-                    child: const Icon(Icons.favorite, color: Colors.white, size: 100),
+                    child: Icon(Icons.favorite, color: Colors.white.withValues(alpha: 0.9), size: 100,
+                      shadows: const [Shadow(blurRadius: 30, color: Colors.redAccent)]),
                   );
                 },
               ),
@@ -273,26 +373,32 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
           AnimatedBuilder(
             animation: _kenBurnsController,
             builder: (context, child) {
-              final scale = 1.0 + (_kenBurnsController.value * 0.12);
-              final dx = (_kenBurnsController.value - 0.5) * 20;
-              final dy = (_kenBurnsController.value - 0.5) * 10;
+              final t = _kenBurnsController.value;
+              final scale = 1.05 + (t * 0.15);
+              final dx = sin(t * pi) * 20;
+              final dy = cos(t * pi * 0.7) * 10;
               return Transform(
                 transform: Matrix4.identity()
-                  ..scale(scale)
+                  ..scale(scale, scale)
                   ..translate(dx, dy),
                 alignment: Alignment.center,
                 child: child,
               );
             },
-            child: CachedNetworkImage(
-              imageUrl: slide.imageUrl,
+            child: Image.network(
+              slide.imageUrl,
               fit: BoxFit.cover,
-              placeholder: (_, __) => Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: _gradient),
-                ),
-              ),
-              errorWidget: (_, __, ___) => Container(
+              width: double.infinity,
+              height: double.infinity,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: _gradient),
+                  ),
+                );
+              },
+              errorBuilder: (_, __, ___) => Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(colors: _gradient),
                 ),
@@ -300,7 +406,19 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
             ),
           ),
 
-        // Dark overlay for text readability
+        // Cinematic dark vignette
+        Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.center,
+              radius: 1.2,
+              colors: [
+                Colors.black.withValues(alpha: hasImage ? 0.1 : 0.0),
+                Colors.black.withValues(alpha: hasImage ? 0.5 : 0.0),
+              ],
+            ),
+          ),
+        ),
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -308,48 +426,88 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
               end: Alignment.bottomCenter,
               colors: [
                 Colors.black.withValues(alpha: hasImage ? 0.3 : 0.0),
-                Colors.black.withValues(alpha: hasImage ? 0.5 : 0.0),
-                Colors.black.withValues(alpha: hasImage ? 0.7 : 0.0),
+                Colors.transparent,
+                Colors.black.withValues(alpha: hasImage ? 0.6 : 0.0),
               ],
+              stops: const [0.0, 0.35, 1.0],
             ),
           ),
         ),
 
-        // Content
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(slide.emoji, style: const TextStyle(fontSize: 52)),
-                const SizedBox(height: 20),
-                Text(
-                  slide.heading,
-                  style: const TextStyle(
-                    color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold,
-                    shadows: [Shadow(blurRadius: 12, color: Colors.black54)],
+        // Content with entrance animation
+        TweenAnimationBuilder<double>(
+          key: ValueKey('slide_$index'),
+          tween: Tween(begin: 0.0, end: 1.0),
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeOut,
+          builder: (context, value, child) {
+            return Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 30 * (1 - value)),
+                child: child,
+              ),
+            );
+          },
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Bouncing emoji
+                  TweenAnimationBuilder<double>(
+                    key: ValueKey('emoji_$index'),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.elasticOut,
+                    builder: (context, value, child) => Transform.scale(
+                      scale: value,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              blurRadius: 25,
+                              spreadRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: Text(slide.emoji, style: const TextStyle(fontSize: 52)),
+                      ),
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    slide.content,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.95),
-                      fontSize: 17, height: 1.5,
-                      shadows: const [Shadow(blurRadius: 6, color: Colors.black38)],
+                  const SizedBox(height: 20),
+                  Text(
+                    slide.heading,
+                    style: const TextStyle(
+                      color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold,
+                      shadows: [Shadow(blurRadius: 12, color: Colors.black54)],
                     ),
                     textAlign: TextAlign.center,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Text(
+                      slide.content,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        fontSize: 17, height: 1.5,
+                        shadows: const [Shadow(blurRadius: 6, color: Colors.black38)],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -361,7 +519,6 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
     if (widget.reel.quiz == null) return const SizedBox();
     final quiz = widget.reel.quiz!;
 
-    // Use last slide's image as quiz background
     final lastSlide = widget.reel.slides.isNotEmpty ? widget.reel.slides.last : null;
     final hasImage = lastSlide != null && lastSlide.imageUrl.isNotEmpty;
 
@@ -369,11 +526,10 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
       fit: StackFit.expand,
       children: [
         if (hasImage)
-          CachedNetworkImage(
-            imageUrl: lastSlide!.imageUrl,
+          Image.network(
+            lastSlide!.imageUrl,
             fit: BoxFit.cover,
-            placeholder: (_, __) => const SizedBox(),
-            errorWidget: (_, __, ___) => const SizedBox(),
+            errorBuilder: (_, __, ___) => const SizedBox(),
           ),
         Container(color: Colors.black.withValues(alpha: hasImage ? 0.65 : 0.0)),
 
@@ -440,7 +596,7 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
                                 color: Colors.white.withValues(alpha: 0.15),
                               ),
                               child: Center(
-                                child: Text('${String.fromCharCode(65 + i)}',
+                                child: Text(String.fromCharCode(65 + i),
                                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                               ),
                             ),
@@ -459,7 +615,6 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
                   );
                 }),
 
-                // Explanation after answering
                 if (_quizAnswered && quiz.explanation.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   AnimatedOpacity(
@@ -494,6 +649,34 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
     );
   }
 
+  List<Widget> _buildParticles() {
+    final t = _particleController.value;
+    return _particles.map((p) {
+      final x = p.x + sin((t + p.phase) * pi * 2) * p.drift;
+      final y = (p.y - t * p.speed * 0.3) % 1.0;
+      final opacity = (sin((t + p.phase) * pi * 2) * 0.5 + 0.5) * p.maxOpacity;
+
+      return Positioned(
+        left: x * MediaQuery.of(context).size.width,
+        top: y * MediaQuery.of(context).size.height,
+        child: Container(
+          width: p.size,
+          height: p.size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: opacity.clamp(0.0, 1.0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withValues(alpha: (opacity * 0.5).clamp(0.0, 1.0)),
+                blurRadius: p.size * 2,
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -506,7 +689,7 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.black26,
               shape: BoxShape.circle,
             ),
@@ -519,4 +702,23 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+class _Particle {
+  final double x, y, size, speed, phase, drift, maxOpacity;
+
+  _Particle({
+    required this.x, required this.y, required this.size,
+    required this.speed, required this.phase, required this.drift,
+    required this.maxOpacity,
+  });
+
+  factory _Particle.random(Random r) => _Particle(
+    x: r.nextDouble(), y: r.nextDouble(),
+    size: r.nextDouble() * 3 + 1,
+    speed: r.nextDouble() * 0.5 + 0.2,
+    phase: r.nextDouble(),
+    drift: r.nextDouble() * 0.03 + 0.01,
+    maxOpacity: r.nextDouble() * 0.25 + 0.05,
+  );
 }

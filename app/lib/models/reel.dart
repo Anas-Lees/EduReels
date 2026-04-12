@@ -14,7 +14,7 @@ class ReelSlide {
   String get imageUrl {
     final prompt = imagePrompt.isNotEmpty
         ? imagePrompt
-        : 'Educational illustration about $heading, $content, photorealistic, cinematic lighting';
+        : 'beautiful educational illustration ${heading.length > 40 ? heading.substring(0, 40) : heading} photorealistic';
     final encoded = Uri.encodeComponent(prompt);
     return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${prompt.hashCode.abs()}';
   }
@@ -70,9 +70,10 @@ class ReelScene {
   });
 
   String get imageUrl {
+    final shortText = text.length > 40 ? text.substring(0, 40) : text;
     final prompt = imagePrompt.isNotEmpty
         ? imagePrompt
-        : 'Educational visual about $text, photorealistic, cinematic lighting';
+        : 'beautiful educational scene $shortText photorealistic';
     final encoded = Uri.encodeComponent(prompt);
     return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${prompt.hashCode.abs()}';
   }
