@@ -265,7 +265,7 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
 
           // Page indicator
           Positioned(
-            bottom: 120, left: 0, right: 0,
+            bottom: 80, left: 0, right: 0,
             child: Center(
               child: SmoothPageIndicator(
                 controller: _pageController,
@@ -284,7 +284,7 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
 
           // Right side actions
           Positioned(
-            right: 12, bottom: 140,
+            right: 12, bottom: 100,
             child: Column(
               children: [
                 _buildActionButton(
@@ -311,35 +311,18 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
             ),
           ),
 
-          // Bottom info
+          // Bottom: just subject badge
           Positioned(
             bottom: 30, left: 20, right: 80,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.reel.title,
-                  style: const TextStyle(
-                    color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold,
-                    shadows: [Shadow(blurRadius: 8, color: Colors.black45)],
-                  )),
-                const SizedBox(height: 4),
-                Text('From: ${widget.reel.pdfName}',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12,
-                    shadows: const [Shadow(blurRadius: 4, color: Colors.black26)]),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  children: widget.reel.tags.take(3).map((tag) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text('#$tag', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                  )).toList(),
-                ),
-              ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(widget.reel.subject,
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+              ),
             ),
           ),
 

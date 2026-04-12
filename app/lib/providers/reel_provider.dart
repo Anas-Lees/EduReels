@@ -144,8 +144,18 @@ class ReelProvider extends ChangeNotifier {
   }
 
   Future<void> toggleLike(String reelId) async {
+    // Optimistic update — instant UI
+    final wasLiked = _likedReels.contains(reelId);
+    if (wasLiked) {
+      _likedReels.remove(reelId);
+    } else {
+      _likedReels.add(reelId);
+    }
+    notifyListeners();
+
     try {
       final liked = await ApiService.toggleLike(reelId);
+      // Sync with server truth
       if (liked) {
         _likedReels.add(reelId);
       } else {
@@ -153,11 +163,26 @@ class ReelProvider extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      // Silently fail
+      // Revert on failure
+      if (wasLiked) {
+        _likedReels.add(reelId);
+      } else {
+        _likedReels.remove(reelId);
+      }
+      notifyListeners();
     }
   }
 
   Future<void> toggleSave(String reelId) async {
+    // Optimistic update — instant UI
+    final wasSaved = _savedReels.contains(reelId);
+    if (wasSaved) {
+      _savedReels.remove(reelId);
+    } else {
+      _savedReels.add(reelId);
+    }
+    notifyListeners();
+
     try {
       final saved = await ApiService.toggleSave(reelId);
       if (saved) {
@@ -167,7 +192,13 @@ class ReelProvider extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      // Silently fail
+      // Revert on failure
+      if (wasSaved) {
+        _savedReels.add(reelId);
+      } else {
+        _savedReels.remove(reelId);
+      }
+      notifyListeners();
     }
   }
 

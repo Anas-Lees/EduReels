@@ -61,9 +61,9 @@ app.get('/api/image', async (req, res) => {
       break;
     }
 
-    // Fallback: picsum with deterministic seed from prompt
-    const picSeed = Math.abs(prompt.split('').reduce((a, c) => a + c.charCodeAt(0), 0));
-    const fallbackUrl = `https://picsum.photos/seed/${picSeed}/${width}/${height}`;
+    // Fallback: loremflickr with keywords extracted from prompt for relevant images
+    const keywords = prompt.replace(/[^a-zA-Z ]/g, '').split(' ').filter(w => w.length > 3).slice(0, 3).join(',') || 'education,learning';
+    const fallbackUrl = `https://loremflickr.com/${width}/${height}/${encodeURIComponent(keywords)}`;
     const fallback = await fetch(fallbackUrl, { redirect: 'follow', timeout: 10000 });
     if (fallback.ok) {
       res.set({
