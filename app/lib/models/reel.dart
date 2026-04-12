@@ -1,0 +1,116 @@
+class ReelSlide {
+  final String heading;
+  final String content;
+  final String emoji;
+
+  ReelSlide({required this.heading, required this.content, required this.emoji});
+
+  factory ReelSlide.fromJson(Map<String, dynamic> json) {
+    return ReelSlide(
+      heading: json['heading'] ?? '',
+      content: json['content'] ?? '',
+      emoji: json['emoji'] ?? '',
+    );
+  }
+}
+
+class ReelQuiz {
+  final String question;
+  final List<String> options;
+  final int answer;
+
+  ReelQuiz({required this.question, required this.options, required this.answer});
+
+  factory ReelQuiz.fromJson(Map<String, dynamic> json) {
+    return ReelQuiz(
+      question: json['question'] ?? '',
+      options: List<String>.from(json['options'] ?? []),
+      answer: json['answer'] ?? 0,
+    );
+  }
+}
+
+class ReelScene {
+  final String text;
+  final String emoji;
+  final int duration;
+  final String transition;
+  final List<String> backgroundGradient;
+
+  ReelScene({
+    required this.text,
+    required this.emoji,
+    required this.duration,
+    required this.transition,
+    required this.backgroundGradient,
+  });
+
+  factory ReelScene.fromJson(Map<String, dynamic> json) {
+    return ReelScene(
+      text: json['text'] ?? '',
+      emoji: json['emoji'] ?? '',
+      duration: json['duration'] ?? 3,
+      transition: json['transition'] ?? 'fade',
+      backgroundGradient: List<String>.from(json['backgroundGradient'] ?? ['#667eea', '#764ba2']),
+    );
+  }
+}
+
+class Reel {
+  final String id;
+  final String userId;
+  final String title;
+  final List<ReelSlide> slides;
+  final List<ReelScene> scenes;
+  final String narration;
+  final ReelQuiz? quiz;
+  final List<String> tags;
+  final String subject;
+  final String type;
+  final int likes;
+  final int views;
+  final String createdAt;
+  final String pdfName;
+
+  Reel({
+    required this.id,
+    required this.userId,
+    required this.title,
+    required this.slides,
+    required this.scenes,
+    required this.narration,
+    this.quiz,
+    required this.tags,
+    required this.subject,
+    required this.type,
+    required this.likes,
+    required this.views,
+    required this.createdAt,
+    required this.pdfName,
+  });
+
+  factory Reel.fromJson(Map<String, dynamic> json) {
+    return Reel(
+      id: json['id'] ?? '',
+      userId: json['userId'] ?? '',
+      title: json['title'] ?? '',
+      slides: (json['slides'] as List?)
+              ?.map((s) => ReelSlide.fromJson(s))
+              .toList() ??
+          [],
+      scenes: (json['scenes'] as List?)
+              ?.map((s) => ReelScene.fromJson(s))
+              .toList() ??
+          [],
+      narration: json['narration'] ?? '',
+      quiz: json['quiz'] != null ? ReelQuiz.fromJson(json['quiz']) : null,
+      tags: List<String>.from(json['tags'] ?? []),
+      subject: json['subject'] ?? '',
+      type: json['type'] ?? 'card',
+      likes: json['likes'] ?? 0,
+      views: json['views'] ?? 0,
+      createdAt: json['createdAt'] ?? '',
+      pdfName: json['pdfName'] ?? '',
+    );
+  }
+}
