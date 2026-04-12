@@ -1,3 +1,5 @@
+const String _imageProxyBase = 'https://edureels.onrender.com/api/image';
+
 class ReelSlide {
   final String heading;
   final String content;
@@ -16,7 +18,7 @@ class ReelSlide {
         ? imagePrompt
         : 'beautiful educational illustration ${heading.length > 40 ? heading.substring(0, 40) : heading} photorealistic';
     final encoded = Uri.encodeComponent(prompt);
-    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${prompt.hashCode.abs()}';
+    return '$_imageProxyBase?prompt=$encoded&width=720&height=1280&seed=${prompt.hashCode.abs()}';
   }
 
   factory ReelSlide.fromJson(Map<String, dynamic> json) {
@@ -75,7 +77,7 @@ class ReelScene {
         ? imagePrompt
         : 'beautiful educational scene $shortText photorealistic';
     final encoded = Uri.encodeComponent(prompt);
-    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${prompt.hashCode.abs()}';
+    return '$_imageProxyBase?prompt=$encoded&width=720&height=1280&seed=${prompt.hashCode.abs()}';
   }
 
   factory ReelScene.fromJson(Map<String, dynamic> json) {
