@@ -13,7 +13,7 @@ class SseEvent {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000/api'; // Change to your PC IP for phone testing
+  static const String baseUrl = 'https://edureels.onrender.com/api';
 
   static Future<String?> _getToken() async {
     final user = FirebaseAuth.instance.currentUser;
