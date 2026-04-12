@@ -15,9 +15,15 @@ const { db } = require('../config/firebase');
 
 const router = express.Router();
 
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Configure multer for PDF uploads
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, '../../uploads'),
+  destination: uploadsDir,
   filename: (req, file, cb) => {
     cb(null, `${uuidv4()}-${file.originalname}`);
   },
@@ -150,10 +156,10 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     }
     // If headers already sent, send error as SSE
     if (res.headersSent) {
-      sendSSE(res, 'error', { message: error.message });
+      sendSSE(res, 'error', { message: 'An error occurred during processing' });
       res.end();
     } else {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'Failed to process PDF' });
     }
   }
 });

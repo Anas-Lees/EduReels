@@ -4,10 +4,14 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 function parseJsonResponse(text) {
-  let jsonStr = text;
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) jsonStr = jsonMatch[1];
-  return JSON.parse(jsonStr.trim());
+  try {
+    let jsonStr = text;
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) jsonStr = jsonMatch[1];
+    return JSON.parse(jsonStr.trim());
+  } catch (e) {
+    throw new Error(`Failed to parse AI response as JSON: ${e.message}`);
+  }
 }
 
 // Original bulk generation (kept for backward compat)
@@ -51,9 +55,13 @@ Return ONLY valid JSON in this exact format:
   ]
 }`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  return parseJsonResponse(text);
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    return parseJsonResponse(text);
+  } catch (e) {
+    throw new Error(`Bulk reel generation failed: ${e.message}`);
+  }
 }
 
 // Step 1: Fast concept extraction (~2s)
@@ -73,10 +81,17 @@ Return ONLY valid JSON:
   ]
 }`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  const data = parseJsonResponse(text);
-  return data.concepts;
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const data = parseJsonResponse(text);
+    if (!data.concepts || !Array.isArray(data.concepts)) {
+      throw new Error('AI response missing concepts array');
+    }
+    return data.concepts;
+  } catch (e) {
+    throw new Error(`Concept extraction failed: ${e.message}`);
+  }
 }
 
 // Step 2: Generate a single card reel for one concept
@@ -111,9 +126,17 @@ Return ONLY valid JSON:
   "tags": ["tag1", "tag2"]
 }`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  return parseJsonResponse(text);
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const data = parseJsonResponse(text);
+    if (!data.title || !data.slides) {
+      throw new Error('AI response missing title or slides');
+    }
+    return data;
+  } catch (e) {
+    throw new Error(`Single reel generation failed: ${e.message}`);
+  }
 }
 
 // Step 3: Generate an animated video reel for one concept
@@ -157,9 +180,17 @@ Return ONLY valid JSON:
   "tags": ["tag1", "tag2"]
 }`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  return parseJsonResponse(text);
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const data = parseJsonResponse(text);
+    if (!data.title || !data.scenes) {
+      throw new Error('AI response missing title or scenes');
+    }
+    return data;
+  } catch (e) {
+    throw new Error(`Video reel generation failed: ${e.message}`);
+  }
 }
 
 module.exports = {

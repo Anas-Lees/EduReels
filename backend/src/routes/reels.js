@@ -1,13 +1,15 @@
 const express = require('express');
+const admin = require('firebase-admin');
 const { verifyToken } = require('../middleware/auth');
 const { db } = require('../config/firebase');
 
 const router = express.Router();
+const FieldValue = admin.firestore.FieldValue;
 
 // GET /api/reels - Get reel feed (paginated)
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const lastId = req.query.lastId;
 
     let query = db.collection('reels')
@@ -22,7 +24,7 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     const snapshot = await query.get();
-    const reels = snapshot.docs.map(doc => doc.data());
+    const reels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     res.json({ reels, hasMore: reels.length === limit });
   } catch (error) {
@@ -38,8 +40,8 @@ router.get('/my', verifyToken, async (req, res) => {
       .where('userId', '==', req.user.uid)
       .get();
 
-    const reels = snapshot.docs.map(doc => doc.data());
-    reels.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const reels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    reels.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     res.json({ reels });
   } catch (error) {
     console.error('My reels error:', error);
@@ -61,14 +63,14 @@ router.post('/:id/like', verifyToken, async (req, res) => {
       // Unlike
       await likeRef.delete();
       await reelRef.update({
-        likes: require('firebase-admin').firestore.FieldValue.increment(-1),
+        likes: FieldValue.increment(-1),
       });
       res.json({ liked: false });
     } else {
       // Like
       await likeRef.set({ userId, reelId, createdAt: new Date().toISOString() });
       await reelRef.update({
-        likes: require('firebase-admin').firestore.FieldValue.increment(1),
+        likes: FieldValue.increment(1),
       });
       res.json({ liked: true });
     }
@@ -83,7 +85,7 @@ router.post('/:id/view', verifyToken, async (req, res) => {
   try {
     const reelRef = db.collection('reels').doc(req.params.id);
     await reelRef.update({
-      views: require('firebase-admin').firestore.FieldValue.increment(1),
+      views: FieldValue.increment(1),
     });
     res.json({ success: true });
   } catch (error) {

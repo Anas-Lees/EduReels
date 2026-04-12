@@ -97,11 +97,11 @@ class _UploadScreenState extends State<UploadScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      _selectedFile != null
+                      (_selectedFile != null || _selectedFileBytes != null)
                           ? Icons.picture_as_pdf
                           : Icons.cloud_upload_outlined,
                       size: 56,
-                      color: _selectedFile != null
+                      color: (_selectedFile != null || _selectedFileBytes != null)
                           ? const Color(0xFF667eea)
                           : Colors.white38,
                     ),
@@ -109,16 +109,16 @@ class _UploadScreenState extends State<UploadScreen> {
                     Text(
                       _selectedFileName ?? 'Tap to select PDF',
                       style: TextStyle(
-                        color: _selectedFile != null
+                        color: (_selectedFile != null || _selectedFileBytes != null)
                             ? Colors.white
                             : Colors.white54,
                         fontSize: 16,
-                        fontWeight: _selectedFile != null
+                        fontWeight: (_selectedFile != null || _selectedFileBytes != null)
                             ? FontWeight.w600
                             : FontWeight.normal,
                       ),
                     ),
-                    if (_selectedFile == null) ...[
+                    if (_selectedFile == null && _selectedFileBytes == null) ...[
                       const SizedBox(height: 4),
                       Text(
                         'Max 10MB',
@@ -196,8 +196,10 @@ class _UploadScreenState extends State<UploadScreen> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: LinearProgressIndicator(
-                          value: reelProvider.generatingDone /
-                              reelProvider.generatingTotal,
+                          value: reelProvider.generatingTotal > 0
+                              ? reelProvider.generatingDone /
+                                  reelProvider.generatingTotal
+                              : 0.0,
                           backgroundColor: Colors.white12,
                           valueColor: const AlwaysStoppedAnimation<Color>(
                               Color(0xFF667eea)),

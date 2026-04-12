@@ -7,11 +7,15 @@ async function verifyToken(req, res, next) {
   }
 
   const token = header.split('Bearer ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Malformed authorization header' });
+  }
   try {
     const decoded = await auth.verifyIdToken(token);
     req.user = decoded;
     next();
   } catch (error) {
+    console.error('Auth error:', error.message);
     return res.status(401).json({ error: 'Invalid token' });
   }
 }

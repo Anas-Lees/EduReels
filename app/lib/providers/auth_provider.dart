@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
@@ -6,6 +7,7 @@ class AuthProvider extends ChangeNotifier {
   User? _user;
   bool _loading = false;
   String? _error;
+  StreamSubscription<User?>? _authSubscription;
 
   User? get user => _user;
   bool get loading => _loading;
@@ -13,10 +15,16 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
 
   AuthProvider() {
-    AuthService.authStateChanges.listen((user) {
+    _authSubscription = AuthService.authStateChanges.listen((user) {
       _user = user;
       notifyListeners();
     });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<bool> signInWithGoogle() async {

@@ -36,6 +36,7 @@ class ApiService {
     Uint8List? fileBytes,
   }) async* {
     final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
     final uri = Uri.parse('$baseUrl/upload/stream');
 
     final request = http.MultipartRequest('POST', uri);
@@ -118,6 +119,7 @@ class ApiService {
     Uint8List? fileBytes,
   }) async {
     final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
     final uri = Uri.parse('$baseUrl/upload');
 
     final request = http.MultipartRequest('POST', uri);
