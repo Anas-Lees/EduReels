@@ -181,11 +181,15 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
+    const isRateLimit = error.message && error.message.includes('429');
+    const userMessage = isRateLimit
+      ? 'AI rate limit reached. Please wait a minute and try again.'
+      : 'An error occurred during processing';
     if (res.headersSent) {
-      sendSSE(res, 'error', { message: 'An error occurred during processing' });
+      sendSSE(res, 'error', { message: userMessage });
       res.end();
     } else {
-      res.status(500).json({ error: 'Failed to process PDF' });
+      res.status(isRateLimit ? 429 : 500).json({ error: userMessage });
     }
   }
 });

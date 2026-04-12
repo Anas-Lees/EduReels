@@ -1,7 +1,7 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const MODEL = 'llama-3.3-70b-versatile';
 
 const STYLE_PRESETS = {
   realistic: 'photorealistic, high detail, natural lighting, cinematic',
@@ -12,6 +12,17 @@ const STYLE_PRESETS = {
   minimalist: 'minimalist flat design, clean geometric shapes, muted palette',
   scifi: 'sci-fi digital art, neon glow, futuristic, cyberpunk aesthetic',
 };
+
+async function chatComplete(prompt) {
+  const response = await groq.chat.completions.create({
+    model: MODEL,
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.7,
+    max_tokens: 4096,
+    response_format: { type: 'json_object' },
+  });
+  return response.choices[0].message.content;
+}
 
 function parseJsonResponse(text) {
   try {
@@ -28,7 +39,7 @@ function getStyleDesc(style) {
   return STYLE_PRESETS[style] || STYLE_PRESETS.realistic;
 }
 
-// Step 1: Fast concept extraction (~2s)
+// Step 1: Fast concept extraction
 async function extractConcepts(pdfText, subject = 'General', explanationStyle = '') {
   const styleInstruction = explanationStyle
     ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
@@ -38,7 +49,7 @@ async function extractConcepts(pdfText, subject = 'General', explanationStyle = 
 Subject: ${subject}
 
 Study Material:
-${pdfText.substring(0, 15000)}
+${pdfText.substring(0, 12000)}
 ${styleInstruction}
 Return ONLY valid JSON:
 {
@@ -49,8 +60,7 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = await chatComplete(prompt);
     const data = parseJsonResponse(text);
     if (!data.concepts || !Array.isArray(data.concepts)) {
       throw new Error('AI response missing concepts array');
@@ -73,7 +83,7 @@ Concept: ${concept}
 Subject: ${subject}
 
 Reference material (use relevant parts):
-${pdfText.substring(0, 8000)}
+${pdfText.substring(0, 6000)}
 
 Create ONE educational reel with 3-5 slides. Rules:
 - Keep each slide short (max 2 sentences)
@@ -100,8 +110,7 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = await chatComplete(prompt);
     const data = parseJsonResponse(text);
     if (!data.title || !data.slides) {
       throw new Error('AI response missing title or slides');
@@ -132,7 +141,7 @@ Concept: ${concept}
 Subject: ${subject}
 
 Reference material:
-${pdfText.substring(0, 8000)}
+${pdfText.substring(0, 6000)}
 
 Create a video reel with 4-6 scenes. Each scene appears for a few seconds with animated text and emoji.
 
@@ -169,8 +178,7 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = await chatComplete(prompt);
     const data = parseJsonResponse(text);
     if (!data.title || !data.scenes) {
       throw new Error('AI response missing title or scenes');
@@ -210,7 +218,7 @@ Rules:
 Subject: ${subject}
 
 Study Material:
-${pdfText.substring(0, 15000)}
+${pdfText.substring(0, 12000)}
 ${styleInstruction}
 Return ONLY valid JSON in this exact format:
 {
@@ -238,8 +246,7 @@ Return ONLY valid JSON in this exact format:
 }`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = await chatComplete(prompt);
     return parseJsonResponse(text);
   } catch (e) {
     throw new Error(`Bulk reel generation failed: ${e.message}`);
