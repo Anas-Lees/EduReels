@@ -1,12 +1,17 @@
 const admin = require('firebase-admin');
 
-// Initialize with default credentials (set GOOGLE_APPLICATION_CREDENTIALS env var)
-// Or download serviceAccountKey.json from Firebase Console
+// Try loading credentials in order: env var (for cloud deploy) > local file > default
 let serviceAccount;
-try {
-  serviceAccount = require('../../serviceAccountKey.json');
-} catch (e) {
-  console.log('No serviceAccountKey.json found, using default credentials');
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // For cloud deployment: pass the entire JSON as an env var
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  try {
+    serviceAccount = require('../../serviceAccountKey.json');
+  } catch (e) {
+    console.log('No serviceAccountKey.json found, using default credentials');
+  }
 }
 
 if (serviceAccount) {
