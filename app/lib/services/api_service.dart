@@ -34,6 +34,7 @@ class ApiService {
     String fileName,
     String subject, {
     Uint8List? fileBytes,
+    String style = 'realistic',
   }) async* {
     final token = await _getToken();
     if (token == null) throw Exception('Not authenticated');
@@ -42,6 +43,7 @@ class ApiService {
     final request = http.MultipartRequest('POST', uri);
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['subject'] = subject;
+    request.fields['style'] = style;
 
     if (fileBytes != null) {
       request.files.add(http.MultipartFile.fromBytes(
@@ -117,6 +119,7 @@ class ApiService {
     String fileName,
     String subject, {
     Uint8List? fileBytes,
+    String style = 'realistic',
   }) async {
     final token = await _getToken();
     if (token == null) throw Exception('Not authenticated');
@@ -125,6 +128,7 @@ class ApiService {
     final request = http.MultipartRequest('POST', uri);
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['subject'] = subject;
+    request.fields['style'] = style;
 
     if (fileBytes != null) {
       request.files.add(http.MultipartFile.fromBytes(

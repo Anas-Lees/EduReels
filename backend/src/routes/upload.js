@@ -10,6 +10,7 @@ const {
   extractConcepts,
   generateSingleReel,
   generateVideoReel,
+  STYLE_PRESETS,
 } = require('../services/claude-service');
 const { db } = require('../config/firebase');
 
@@ -57,6 +58,7 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     }
 
     const subject = req.body.subject || 'General';
+    const style = STYLE_PRESETS[req.body.style] ? req.body.style : 'realistic';
     const filePath = req.file.path;
 
     // Parse PDF
@@ -70,7 +72,7 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
 
     // Set SSE headers
     res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
+      'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
@@ -86,48 +88,59 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
 
     if (aborted) { fs.unlinkSync(filePath); return res.end(); }
 
-    // Step 2: Generate reels one by one
-    for (let i = 0; i < concepts.length; i++) {
+    // Step 2: Generate reels in parallel batches of 3 for speed
+    const BATCH_SIZE = 3;
+    for (let batchStart = 0; batchStart < concepts.length; batchStart += BATCH_SIZE) {
       if (aborted) break;
 
-      try {
-        const isVideo = (i % 3 === 1); // Every 3rd reel (index 1, 4, 7) is video
-        let reelData;
+      const batch = concepts.slice(batchStart, batchStart + BATCH_SIZE);
+      const promises = batch.map((concept, offset) => {
+        const i = batchStart + offset;
+        const isVideo = (i % 3 === 1);
+        const genFn = isVideo
+          ? generateVideoReel(concept, pdfData.text, subject, style)
+          : generateSingleReel(concept, pdfData.text, subject, style);
+        return genFn
+          .then(data => ({ data, index: i, isVideo }))
+          .catch(err => ({ error: err, index: i, isVideo: false }));
+      });
 
-        if (isVideo) {
-          reelData = await generateVideoReel(concepts[i], pdfData.text, subject);
-        } else {
-          reelData = await generateSingleReel(concepts[i], pdfData.text, subject);
+      const results = await Promise.all(promises);
+
+      // Process results in order
+      for (const result of results) {
+        if (aborted) break;
+
+        if (result.error) {
+          console.error(`Error generating reel ${result.index + 1}:`, result.error.message);
+          sendSSE(res, 'error', { message: result.error.message, index: result.index });
+          continue;
         }
 
         const reelId = uuidv4();
         const reelDoc = {
           id: reelId,
           userId: req.user.uid,
-          title: reelData.title,
-          slides: reelData.slides || [],
-          scenes: reelData.scenes || [],
-          narration: reelData.narration,
-          quiz: reelData.quiz,
-          tags: reelData.tags || [],
+          title: result.data.title,
+          slides: result.data.slides || [],
+          scenes: result.data.scenes || [],
+          narration: result.data.narration,
+          quiz: result.data.quiz,
+          tags: result.data.tags || [],
           subject,
-          type: isVideo ? 'video' : 'card',
+          style,
+          type: result.isVideo ? 'video' : 'card',
           likes: 0,
           views: 0,
           createdAt: new Date().toISOString(),
           pdfName: req.file.originalname,
         };
 
-        // Save immediately to Firestore
         await db.collection('reels').doc(reelId).set(reelDoc);
         reelIds.push(reelId);
 
-        // Send reel to client
         sendSSE(res, 'reel', reelDoc);
-        console.log(`Generated reel ${i + 1}/${concepts.length}: ${reelData.title} (${isVideo ? 'video' : 'card'})`);
-      } catch (err) {
-        console.error(`Error generating reel ${i + 1}:`, err.message);
-        sendSSE(res, 'error', { message: err.message, index: i });
+        console.log(`Generated reel ${result.index + 1}/${concepts.length}: ${result.data.title} (${result.isVideo ? 'video' : 'card'}) [${style}]`);
       }
     }
 
@@ -138,6 +151,7 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
         userId: req.user.uid,
         fileName: req.file.originalname,
         subject,
+        style,
         reelCount: reelIds.length,
         reelIds,
         createdAt: new Date().toISOString(),
@@ -154,7 +168,6 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
-    // If headers already sent, send error as SSE
     if (res.headersSent) {
       sendSSE(res, 'error', { message: 'An error occurred during processing' });
       res.end();
@@ -172,6 +185,7 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
     }
 
     const subject = req.body.subject || 'General';
+    const style = STYLE_PRESETS[req.body.style] ? req.body.style : 'realistic';
     const filePath = req.file.path;
 
     const pdfBuffer = fs.readFileSync(filePath);
@@ -182,7 +196,7 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
       return res.status(400).json({ error: 'PDF has too little text content' });
     }
 
-    const reelData = await generateReelsFromText(pdfData.text, subject);
+    const reelData = await generateReelsFromText(pdfData.text, subject, style);
 
     const reelIds = [];
     const batch = db.batch();
@@ -201,6 +215,7 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
         quiz: reel.quiz,
         tags: reel.tags || [],
         subject,
+        style,
         type: 'card',
         likes: 0,
         views: 0,
@@ -217,6 +232,7 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
       userId: req.user.uid,
       fileName: req.file.originalname,
       subject,
+      style,
       reelCount: reelIds.length,
       reelIds,
       createdAt: new Date().toISOString(),
@@ -229,7 +245,7 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
   } catch (error) {
     console.error('Upload error:', error.message || error);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.status(500).json({ error: error.message || 'Failed to process PDF.' });
+    res.status(500).json({ error: 'Failed to process PDF' });
   }
 });
 

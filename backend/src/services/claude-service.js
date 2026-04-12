@@ -3,6 +3,16 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
+const STYLE_PRESETS = {
+  realistic: 'photorealistic, high detail, natural lighting, cinematic',
+  anime: 'anime style, vibrant colors, Studio Ghibli inspired, detailed illustration',
+  watercolor: 'watercolor painting, soft edges, artistic, pastel tones, flowing',
+  '3d': '3D rendered, Pixar-style, glossy, vibrant, soft lighting',
+  comic: 'comic book illustration, bold outlines, halftone dots, dynamic',
+  minimalist: 'minimalist flat design, clean geometric shapes, muted palette',
+  scifi: 'sci-fi digital art, neon glow, futuristic, cyberpunk aesthetic',
+};
+
 function parseJsonResponse(text) {
   try {
     let jsonStr = text;
@@ -14,54 +24,8 @@ function parseJsonResponse(text) {
   }
 }
 
-// Original bulk generation (kept for backward compat)
-async function generateReelsFromText(pdfText, subject = 'General') {
-  const prompt = `You are an educational content creator who makes viral, engaging study reels (like Instagram/TikTok but for learning).
-
-Given this study material, create 5-8 short educational reels. Each reel should cover ONE key concept and be engaging for students.
-
-Rules:
-- Keep each slide short (max 2 sentences)
-- Use simple language, make it fun
-- Add relevant emojis
-- Include a quiz at the end of each reel
-- The narration should be conversational, like a friendly tutor
-
-Subject: ${subject}
-
-Study Material:
-${pdfText.substring(0, 15000)}
-
-Return ONLY valid JSON in this exact format:
-{
-  "reels": [
-    {
-      "title": "Short catchy title",
-      "slides": [
-        {
-          "heading": "Slide heading",
-          "content": "Brief explanation (1-2 sentences max)",
-          "emoji": "relevant emoji"
-        }
-      ],
-      "narration": "Full narration script for TTS (conversational, 30-60 seconds when spoken)",
-      "quiz": {
-        "question": "Quick quiz question about this concept",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "answer": 0
-      },
-      "tags": ["tag1", "tag2"]
-    }
-  ]
-}`;
-
-  try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return parseJsonResponse(text);
-  } catch (e) {
-    throw new Error(`Bulk reel generation failed: ${e.message}`);
-  }
+function getStyleDesc(style) {
+  return STYLE_PRESETS[style] || STYLE_PRESETS.realistic;
 }
 
 // Step 1: Fast concept extraction (~2s)
@@ -95,7 +59,8 @@ Return ONLY valid JSON:
 }
 
 // Step 2: Generate a single card reel for one concept
-async function generateSingleReel(concept, pdfText, subject = 'General') {
+async function generateSingleReel(concept, pdfText, subject = 'General', style = 'realistic') {
+  const styleDesc = getStyleDesc(style);
   const prompt = `You are an educational content creator making a viral study reel about this specific concept.
 
 Concept: ${concept}
@@ -108,20 +73,22 @@ Create ONE educational reel with 3-5 slides. Rules:
 - Keep each slide short (max 2 sentences)
 - Use simple language, make it fun and engaging
 - Add relevant emojis
-- Include a quiz at the end
+- Include a quiz at the end with an explanation of the correct answer
 - Narration should be conversational, like a friendly tutor
+- For EACH slide, generate an "imagePrompt": a detailed visual description (30-60 words) for an AI image generator to create a stunning background. Style: ${styleDesc}. Do NOT include any text, letters, numbers or words in the image description - describe only visual scenes, objects, and atmosphere that relate to the slide content.
 
 Return ONLY valid JSON:
 {
   "title": "Short catchy title",
   "slides": [
-    { "heading": "Slide heading", "content": "Brief explanation (1-2 sentences)", "emoji": "relevant emoji" }
+    { "heading": "Slide heading", "content": "Brief explanation (1-2 sentences)", "emoji": "relevant emoji", "imagePrompt": "detailed visual scene description for AI image generation, ${styleDesc}" }
   ],
   "narration": "Conversational narration script (30-60 seconds when spoken)",
   "quiz": {
     "question": "Quick quiz question",
     "options": ["Option A", "Option B", "Option C", "Option D"],
-    "answer": 0
+    "answer": 0,
+    "explanation": "Brief explanation of why the correct answer is right (1-2 sentences)"
   },
   "tags": ["tag1", "tag2"]
 }`;
@@ -140,7 +107,8 @@ Return ONLY valid JSON:
 }
 
 // Step 3: Generate an animated video reel for one concept
-async function generateVideoReel(concept, pdfText, subject = 'General') {
+async function generateVideoReel(concept, pdfText, subject = 'General', style = 'realistic') {
+  const styleDesc = getStyleDesc(style);
   const prompt = `You are creating an animated educational video reel (like Instagram Stories) about this concept.
 
 Concept: ${concept}
@@ -149,7 +117,7 @@ Subject: ${subject}
 Reference material:
 ${pdfText.substring(0, 8000)}
 
-Create a video reel with 4-6 scenes. Each scene appears for a few seconds with animated text and emoji. Think of it like an Instagram Story that teaches something.
+Create a video reel with 4-6 scenes. Each scene appears for a few seconds with animated text and emoji.
 
 Rules:
 - Each scene has ONE key point (1-2 sentences max)
@@ -157,7 +125,8 @@ Rules:
 - Pick vibrant gradient colors that match the mood
 - Transitions: use "fade", "slide", or "scale"
 - Total duration should be 15-25 seconds
-- Include a quiz at the end
+- Include a quiz at the end with an explanation
+- For EACH scene, generate an "imagePrompt": a detailed visual description (30-60 words) for an AI image generator. Style: ${styleDesc}. Do NOT include text, letters, numbers or words - describe only visual scenes, objects, lighting, and atmosphere.
 
 Return ONLY valid JSON:
 {
@@ -165,17 +134,19 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "text": "Main point for this scene (1-2 sentences)",
-      "emoji": "🔥",
+      "emoji": "relevant emoji",
       "duration": 3,
       "transition": "fade",
-      "backgroundGradient": ["#667eea", "#764ba2"]
+      "backgroundGradient": ["#667eea", "#764ba2"],
+      "imagePrompt": "detailed visual scene description for AI image generation, ${styleDesc}"
     }
   ],
   "narration": "Full narration script for the whole video",
   "quiz": {
     "question": "Quick quiz question",
     "options": ["Option A", "Option B", "Option C", "Option D"],
-    "answer": 0
+    "answer": 0,
+    "explanation": "Brief explanation of why the correct answer is right"
   },
   "tags": ["tag1", "tag2"]
 }`;
@@ -193,9 +164,64 @@ Return ONLY valid JSON:
   }
 }
 
+// Bulk generation (kept for backward compat)
+async function generateReelsFromText(pdfText, subject = 'General', style = 'realistic') {
+  const styleDesc = getStyleDesc(style);
+  const prompt = `You are an educational content creator who makes viral, engaging study reels.
+
+Given this study material, create 5-8 short educational reels. Each reel should cover ONE key concept.
+
+Rules:
+- Keep each slide short (max 2 sentences)
+- Use simple language, make it fun
+- Add relevant emojis
+- Include a quiz at the end of each reel with an explanation
+- The narration should be conversational, like a friendly tutor
+- For EACH slide, generate an "imagePrompt": a detailed visual description (30-60 words) for an AI image generator. Style: ${styleDesc}. NO text/letters/numbers in the image - only visual scenes.
+
+Subject: ${subject}
+
+Study Material:
+${pdfText.substring(0, 15000)}
+
+Return ONLY valid JSON in this exact format:
+{
+  "reels": [
+    {
+      "title": "Short catchy title",
+      "slides": [
+        {
+          "heading": "Slide heading",
+          "content": "Brief explanation (1-2 sentences max)",
+          "emoji": "relevant emoji",
+          "imagePrompt": "detailed visual description, ${styleDesc}"
+        }
+      ],
+      "narration": "Full narration script for TTS (conversational, 30-60 seconds when spoken)",
+      "quiz": {
+        "question": "Quick quiz question about this concept",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "answer": 0,
+        "explanation": "Brief explanation of the correct answer"
+      },
+      "tags": ["tag1", "tag2"]
+    }
+  ]
+}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    return parseJsonResponse(text);
+  } catch (e) {
+    throw new Error(`Bulk reel generation failed: ${e.message}`);
+  }
+}
+
 module.exports = {
   generateReelsFromText,
   extractConcepts,
   generateSingleReel,
   generateVideoReel,
+  STYLE_PRESETS,
 };

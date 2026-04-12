@@ -2,14 +2,27 @@ class ReelSlide {
   final String heading;
   final String content;
   final String emoji;
+  final String imagePrompt;
 
-  ReelSlide({required this.heading, required this.content, required this.emoji});
+  ReelSlide({
+    required this.heading,
+    required this.content,
+    required this.emoji,
+    this.imagePrompt = '',
+  });
+
+  String get imageUrl {
+    if (imagePrompt.isEmpty) return '';
+    final encoded = Uri.encodeComponent(imagePrompt);
+    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${imagePrompt.hashCode.abs()}';
+  }
 
   factory ReelSlide.fromJson(Map<String, dynamic> json) {
     return ReelSlide(
       heading: json['heading'] ?? '',
       content: json['content'] ?? '',
       emoji: json['emoji'] ?? '',
+      imagePrompt: json['imagePrompt'] ?? '',
     );
   }
 }
@@ -18,14 +31,21 @@ class ReelQuiz {
   final String question;
   final List<String> options;
   final int answer;
+  final String explanation;
 
-  ReelQuiz({required this.question, required this.options, required this.answer});
+  ReelQuiz({
+    required this.question,
+    required this.options,
+    required this.answer,
+    this.explanation = '',
+  });
 
   factory ReelQuiz.fromJson(Map<String, dynamic> json) {
     return ReelQuiz(
       question: json['question'] ?? '',
       options: List<String>.from(json['options'] ?? []),
       answer: json['answer'] ?? 0,
+      explanation: json['explanation'] ?? '',
     );
   }
 }
@@ -36,6 +56,7 @@ class ReelScene {
   final int duration;
   final String transition;
   final List<String> backgroundGradient;
+  final String imagePrompt;
 
   ReelScene({
     required this.text,
@@ -43,7 +64,14 @@ class ReelScene {
     required this.duration,
     required this.transition,
     required this.backgroundGradient,
+    this.imagePrompt = '',
   });
+
+  String get imageUrl {
+    if (imagePrompt.isEmpty) return '';
+    final encoded = Uri.encodeComponent(imagePrompt);
+    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${imagePrompt.hashCode.abs()}';
+  }
 
   factory ReelScene.fromJson(Map<String, dynamic> json) {
     return ReelScene(
@@ -52,6 +80,7 @@ class ReelScene {
       duration: json['duration'] ?? 3,
       transition: json['transition'] ?? 'fade',
       backgroundGradient: List<String>.from(json['backgroundGradient'] ?? ['#667eea', '#764ba2']),
+      imagePrompt: json['imagePrompt'] ?? '',
     );
   }
 }
@@ -66,6 +95,7 @@ class Reel {
   final ReelQuiz? quiz;
   final List<String> tags;
   final String subject;
+  final String style;
   final String type;
   final int likes;
   final int views;
@@ -82,6 +112,7 @@ class Reel {
     this.quiz,
     required this.tags,
     required this.subject,
+    this.style = 'realistic',
     required this.type,
     required this.likes,
     required this.views,
@@ -106,6 +137,7 @@ class Reel {
       quiz: json['quiz'] != null ? ReelQuiz.fromJson(json['quiz']) : null,
       tags: List<String>.from(json['tags'] ?? []),
       subject: json['subject'] ?? '',
+      style: json['style'] ?? 'realistic',
       type: json['type'] ?? 'card',
       likes: json['likes'] ?? 0,
       views: json['views'] ?? 0,

@@ -56,7 +56,7 @@ class ReelProvider extends ChangeNotifier {
 
   // Streaming upload - reels appear one by one
   Future<void> uploadPdfStreaming(String? filePath, String fileName,
-      String subject, {Uint8List? fileBytes}) async {
+      String subject, {Uint8List? fileBytes, String style = 'realistic'}) async {
     _uploading = true;
     _isGenerating = false;
     _generatingTotal = 0;
@@ -69,6 +69,7 @@ class ReelProvider extends ChangeNotifier {
       final stream = ApiService.uploadPdfStream(
         filePath, fileName, subject,
         fileBytes: fileBytes,
+        style: style,
       );
 
       await for (final event in stream) {
