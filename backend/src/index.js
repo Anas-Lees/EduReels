@@ -25,7 +25,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/reels', reelRoutes);
 app.use('/api/groups', groupRoutes);
 
-// Image proxy - bypasses CORS for Pollinations AI images
+// Image proxy - bypasses CORS for AI images with retry + fallback
 app.get('/api/image', async (req, res) => {
   try {
     const prompt = req.query.prompt;
@@ -35,21 +35,46 @@ app.get('/api/image', async (req, res) => {
     const height = req.query.height || 1280;
     const seed = req.query.seed || '42';
     const encoded = encodeURIComponent(prompt);
-    const url = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&seed=${seed}`;
 
     const fetch = (await import('node-fetch')).default;
-    const response = await fetch(url, { timeout: 30000 });
 
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'Image generation failed' });
+    // Try Pollinations with retry
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const url = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&seed=${seed}`;
+        const response = await fetch(url, { timeout: 25000 });
+        if (response.ok) {
+          res.set({
+            'Content-Type': response.headers.get('content-type') || 'image/jpeg',
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*',
+          });
+          return response.body.pipe(res);
+        }
+        if (response.status === 429 && attempt === 0) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+      } catch (e) {
+        if (attempt === 0) continue;
+      }
+      break;
     }
 
-    res.set({
-      'Content-Type': response.headers.get('content-type') || 'image/jpeg',
-      'Cache-Control': 'public, max-age=86400',
-      'Access-Control-Allow-Origin': '*',
-    });
-    response.body.pipe(res);
+    // Fallback: picsum with deterministic seed from prompt
+    const picSeed = Math.abs(prompt.split('').reduce((a, c) => a + c.charCodeAt(0), 0));
+    const fallbackUrl = `https://picsum.photos/seed/${picSeed}/${width}/${height}`;
+    const fallback = await fetch(fallbackUrl, { redirect: 'follow', timeout: 10000 });
+    if (fallback.ok) {
+      res.set({
+        'Content-Type': fallback.headers.get('content-type') || 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+      });
+      return fallback.body.pipe(res);
+    }
+
+    res.status(502).json({ error: 'All image sources failed' });
   } catch (e) {
     console.error('Image proxy error:', e.message);
     res.status(500).json({ error: 'Image proxy failed' });
