@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/reel.dart';
+import '../models/group.dart';
 
 class SseEvent {
   final String event;
@@ -35,6 +36,8 @@ class ApiService {
     String subject, {
     Uint8List? fileBytes,
     String style = 'realistic',
+    String? groupId,
+    String? explanationStyle,
   }) async* {
     final token = await _getToken();
     if (token == null) throw Exception('Not authenticated');
@@ -44,6 +47,8 @@ class ApiService {
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['subject'] = subject;
     request.fields['style'] = style;
+    if (groupId != null && groupId.isNotEmpty) request.fields['groupId'] = groupId;
+    if (explanationStyle != null && explanationStyle.isNotEmpty) request.fields['explanationStyle'] = explanationStyle;
 
     if (fileBytes != null) {
       request.files.add(http.MultipartFile.fromBytes(
@@ -120,6 +125,8 @@ class ApiService {
     String subject, {
     Uint8List? fileBytes,
     String style = 'realistic',
+    String? groupId,
+    String? explanationStyle,
   }) async {
     final token = await _getToken();
     if (token == null) throw Exception('Not authenticated');
@@ -129,6 +136,8 @@ class ApiService {
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['subject'] = subject;
     request.fields['style'] = style;
+    if (groupId != null && groupId.isNotEmpty) request.fields['groupId'] = groupId;
+    if (explanationStyle != null && explanationStyle.isNotEmpty) request.fields['explanationStyle'] = explanationStyle;
 
     if (fileBytes != null) {
       request.files.add(http.MultipartFile.fromBytes(
@@ -220,5 +229,53 @@ class ApiService {
       Uri.parse('$baseUrl/reels/$reelId/view'),
       headers: headers,
     );
+  }
+
+  // Groups API
+  static Future<List<Group>> getGroups() async {
+    final headers = await _headers();
+    final response = await http.get(Uri.parse('$baseUrl/groups'), headers: headers);
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return (data['groups'] as List).map((g) => Group.fromJson(g)).toList();
+    }
+    throw Exception('Failed to load groups');
+  }
+
+  static Future<Group> createGroup(String name, String description) async {
+    final headers = await _headers();
+    final response = await http.post(
+      Uri.parse('$baseUrl/groups'),
+      headers: headers,
+      body: jsonEncode({'name': name, 'description': description}),
+    );
+    if (response.statusCode == 200) {
+      return Group.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create group');
+  }
+
+  static Future<void> deleteGroup(String groupId) async {
+    final headers = await _headers();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/groups/$groupId'),
+      headers: headers,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete group');
+    }
+  }
+
+  static Future<List<Reel>> getGroupReels(String groupId) async {
+    final headers = await _headers();
+    final response = await http.get(
+      Uri.parse('$baseUrl/groups/$groupId/reels'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return (data['reels'] as List).map((r) => Reel.fromJson(r)).toList();
+    }
+    throw Exception('Failed to load group reels');
   }
 }

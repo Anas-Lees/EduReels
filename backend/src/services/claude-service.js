@@ -29,14 +29,17 @@ function getStyleDesc(style) {
 }
 
 // Step 1: Fast concept extraction (~2s)
-async function extractConcepts(pdfText, subject = 'General') {
+async function extractConcepts(pdfText, subject = 'General', explanationStyle = '') {
+  const styleInstruction = explanationStyle
+    ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
+    : '';
   const prompt = `You are an educational content analyzer. Given this study material, identify 5-8 KEY concepts that would make great short educational reels.
 
 Subject: ${subject}
 
 Study Material:
 ${pdfText.substring(0, 15000)}
-
+${styleInstruction}
 Return ONLY valid JSON:
 {
   "concepts": [
@@ -59,8 +62,11 @@ Return ONLY valid JSON:
 }
 
 // Step 2: Generate a single card reel for one concept
-async function generateSingleReel(concept, pdfText, subject = 'General', style = 'realistic') {
+async function generateSingleReel(concept, pdfText, subject = 'General', style = 'realistic', explanationStyle = '') {
   const styleDesc = getStyleDesc(style);
+  const styleInstruction = explanationStyle
+    ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
+    : '';
   const prompt = `You are an educational content creator making a viral study reel about this specific concept.
 
 Concept: ${concept}
@@ -76,7 +82,7 @@ Create ONE educational reel with 3-5 slides. Rules:
 - Include a quiz at the end with an explanation of the correct answer
 - Narration should be conversational, like a friendly tutor
 - For EACH slide, generate an "imagePrompt": a detailed visual description (30-60 words) for an AI image generator to create a stunning background. Style: ${styleDesc}. Do NOT include any text, letters, numbers or words in the image description - describe only visual scenes, objects, and atmosphere that relate to the slide content.
-
+${styleInstruction}
 Return ONLY valid JSON:
 {
   "title": "Short catchy title",
@@ -100,6 +106,14 @@ Return ONLY valid JSON:
     if (!data.title || !data.slides) {
       throw new Error('AI response missing title or slides');
     }
+    // Ensure every slide has an imagePrompt
+    if (data.slides) {
+      data.slides.forEach(slide => {
+        if (!slide.imagePrompt || !slide.imagePrompt.trim()) {
+          slide.imagePrompt = `Educational illustration about ${slide.heading || concept}, ${styleDesc}`;
+        }
+      });
+    }
     return data;
   } catch (e) {
     throw new Error(`Single reel generation failed: ${e.message}`);
@@ -107,8 +121,11 @@ Return ONLY valid JSON:
 }
 
 // Step 3: Generate an animated video reel for one concept
-async function generateVideoReel(concept, pdfText, subject = 'General', style = 'realistic') {
+async function generateVideoReel(concept, pdfText, subject = 'General', style = 'realistic', explanationStyle = '') {
   const styleDesc = getStyleDesc(style);
+  const styleInstruction = explanationStyle
+    ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
+    : '';
   const prompt = `You are creating an animated educational video reel (like Instagram Stories) about this concept.
 
 Concept: ${concept}
@@ -127,7 +144,7 @@ Rules:
 - Total duration should be 15-25 seconds
 - Include a quiz at the end with an explanation
 - For EACH scene, generate an "imagePrompt": a detailed visual description (30-60 words) for an AI image generator. Style: ${styleDesc}. Do NOT include text, letters, numbers or words - describe only visual scenes, objects, lighting, and atmosphere.
-
+${styleInstruction}
 Return ONLY valid JSON:
 {
   "title": "Short catchy title",
@@ -158,6 +175,14 @@ Return ONLY valid JSON:
     if (!data.title || !data.scenes) {
       throw new Error('AI response missing title or scenes');
     }
+    // Ensure every scene has an imagePrompt
+    if (data.scenes) {
+      data.scenes.forEach(scene => {
+        if (!scene.imagePrompt || !scene.imagePrompt.trim()) {
+          scene.imagePrompt = `Educational illustration about ${scene.text || concept}, ${styleDesc}`;
+        }
+      });
+    }
     return data;
   } catch (e) {
     throw new Error(`Video reel generation failed: ${e.message}`);
@@ -165,8 +190,11 @@ Return ONLY valid JSON:
 }
 
 // Bulk generation (kept for backward compat)
-async function generateReelsFromText(pdfText, subject = 'General', style = 'realistic') {
+async function generateReelsFromText(pdfText, subject = 'General', style = 'realistic', explanationStyle = '') {
   const styleDesc = getStyleDesc(style);
+  const styleInstruction = explanationStyle
+    ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
+    : '';
   const prompt = `You are an educational content creator who makes viral, engaging study reels.
 
 Given this study material, create 5-8 short educational reels. Each reel should cover ONE key concept.
@@ -183,7 +211,7 @@ Subject: ${subject}
 
 Study Material:
 ${pdfText.substring(0, 15000)}
-
+${styleInstruction}
 Return ONLY valid JSON in this exact format:
 {
   "reels": [

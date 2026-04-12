@@ -5,6 +5,7 @@ const path = require('path');
 
 const uploadRoutes = require('./routes/upload');
 const reelRoutes = require('./routes/reels');
+const groupRoutes = require('./routes/groups');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reels', reelRoutes);
+app.use('/api/groups', groupRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

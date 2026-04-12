@@ -12,7 +12,7 @@ const {
   generateVideoReel,
   STYLE_PRESETS,
 } = require('../services/claude-service');
-const { db } = require('../config/firebase');
+const { db, admin } = require('../config/firebase');
 
 const router = express.Router();
 
@@ -59,6 +59,8 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
 
     const subject = req.body.subject || 'General';
     const style = STYLE_PRESETS[req.body.style] ? req.body.style : 'realistic';
+    const groupId = req.body.groupId || '';
+    const explanationStyle = req.body.explanationStyle || '';
     const filePath = req.file.path;
 
     // Parse PDF
@@ -80,7 +82,7 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     res.flushHeaders();
 
     // Step 1: Extract concepts (fast ~2s)
-    const concepts = await extractConcepts(pdfData.text, subject);
+    const concepts = await extractConcepts(pdfData.text, subject, explanationStyle);
     const uploadId = uuidv4();
     const reelIds = [];
 
@@ -98,8 +100,8 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
         const i = batchStart + offset;
         const isVideo = (i % 3 === 1);
         const genFn = isVideo
-          ? generateVideoReel(concept, pdfData.text, subject, style)
-          : generateSingleReel(concept, pdfData.text, subject, style);
+          ? generateVideoReel(concept, pdfData.text, subject, style, explanationStyle)
+          : generateSingleReel(concept, pdfData.text, subject, style, explanationStyle);
         return genFn
           .then(data => ({ data, index: i, isVideo }))
           .catch(err => ({ error: err, index: i, isVideo: false }));
@@ -134,6 +136,8 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
           views: 0,
           createdAt: new Date().toISOString(),
           pdfName: req.file.originalname,
+          groupId: groupId || '',
+          explanationStyle: explanationStyle || '',
         };
 
         await db.collection('reels').doc(reelId).set(reelDoc);
@@ -154,8 +158,17 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
         style,
         reelCount: reelIds.length,
         reelIds,
+        groupId: groupId || '',
+        explanationStyle: explanationStyle || '',
         createdAt: new Date().toISOString(),
       });
+
+      // Update group reel count if groupId is provided
+      if (groupId) {
+        await db.collection('groups').doc(groupId).update({
+          reelCount: admin.firestore.FieldValue.increment(reelIds.length),
+        });
+      }
     }
 
     // Clean up
@@ -186,6 +199,8 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
 
     const subject = req.body.subject || 'General';
     const style = STYLE_PRESETS[req.body.style] ? req.body.style : 'realistic';
+    const groupId = req.body.groupId || '';
+    const explanationStyle = req.body.explanationStyle || '';
     const filePath = req.file.path;
 
     const pdfBuffer = fs.readFileSync(filePath);
@@ -196,7 +211,7 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
       return res.status(400).json({ error: 'PDF has too little text content' });
     }
 
-    const reelData = await generateReelsFromText(pdfData.text, subject, style);
+    const reelData = await generateReelsFromText(pdfData.text, subject, style, explanationStyle);
 
     const reelIds = [];
     const batch = db.batch();
@@ -221,6 +236,8 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
         views: 0,
         createdAt: new Date().toISOString(),
         pdfName: req.file.originalname,
+        groupId: groupId || '',
+        explanationStyle: explanationStyle || '',
       });
 
       reelIds.push(reelId);
@@ -235,8 +252,17 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
       style,
       reelCount: reelIds.length,
       reelIds,
+      groupId: groupId || '',
+      explanationStyle: explanationStyle || '',
       createdAt: new Date().toISOString(),
     });
+
+    // Update group reel count if groupId is provided
+    if (groupId) {
+      batch.update(db.collection('groups').doc(groupId), {
+        reelCount: admin.firestore.FieldValue.increment(reelIds.length),
+      });
+    }
 
     await batch.commit();
     fs.unlinkSync(filePath);

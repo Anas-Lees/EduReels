@@ -12,9 +12,11 @@ class ReelSlide {
   });
 
   String get imageUrl {
-    if (imagePrompt.isEmpty) return '';
-    final encoded = Uri.encodeComponent(imagePrompt);
-    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${imagePrompt.hashCode.abs()}';
+    final prompt = imagePrompt.isNotEmpty
+        ? imagePrompt
+        : 'Educational illustration about $heading, $content, photorealistic, cinematic lighting';
+    final encoded = Uri.encodeComponent(prompt);
+    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${prompt.hashCode.abs()}';
   }
 
   factory ReelSlide.fromJson(Map<String, dynamic> json) {
@@ -68,9 +70,11 @@ class ReelScene {
   });
 
   String get imageUrl {
-    if (imagePrompt.isEmpty) return '';
-    final encoded = Uri.encodeComponent(imagePrompt);
-    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${imagePrompt.hashCode.abs()}';
+    final prompt = imagePrompt.isNotEmpty
+        ? imagePrompt
+        : 'Educational visual about $text, photorealistic, cinematic lighting';
+    final encoded = Uri.encodeComponent(prompt);
+    return 'https://image.pollinations.ai/prompt/$encoded?width=720&height=1280&model=flux&nologo=true&seed=${prompt.hashCode.abs()}';
   }
 
   factory ReelScene.fromJson(Map<String, dynamic> json) {
@@ -101,6 +105,8 @@ class Reel {
   final int views;
   final String createdAt;
   final String pdfName;
+  final String groupId;
+  final String explanationStyle;
 
   Reel({
     required this.id,
@@ -118,6 +124,8 @@ class Reel {
     required this.views,
     required this.createdAt,
     required this.pdfName,
+    this.groupId = '',
+    this.explanationStyle = '',
   });
 
   factory Reel.fromJson(Map<String, dynamic> json) {
@@ -143,6 +151,8 @@ class Reel {
       views: json['views'] ?? 0,
       createdAt: json['createdAt'] ?? '',
       pdfName: json['pdfName'] ?? '',
+      groupId: json['groupId'] ?? '',
+      explanationStyle: json['explanationStyle'] ?? '',
     );
   }
 }

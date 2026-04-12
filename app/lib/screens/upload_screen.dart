@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/reel_provider.dart';
+import '../providers/group_provider.dart';
+import '../models/group.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -19,6 +21,8 @@ class _UploadScreenState extends State<UploadScreen>
   String? _selectedFileName;
   Uint8List? _selectedFileBytes;
   String _selectedStyle = 'realistic';
+  String? _selectedGroupId;
+  final _explanationController = TextEditingController();
 
   late final AnimationController _pulseController;
 
@@ -55,11 +59,15 @@ class _UploadScreenState extends State<UploadScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<GroupProvider>().loadGroups();
+    });
   }
 
   @override
   void dispose() {
     _subjectController.dispose();
+    _explanationController.dispose();
     _pulseController.dispose();
     super.dispose();
   }
@@ -89,6 +97,8 @@ class _UploadScreenState extends State<UploadScreen>
           _subjectController.text,
           fileBytes: _selectedFileBytes,
           style: _selectedStyle,
+          groupId: _selectedGroupId,
+          explanationStyle: _explanationController.text.isNotEmpty ? _explanationController.text : null,
         );
   }
 
@@ -130,7 +140,46 @@ class _UploadScreenState extends State<UploadScreen>
             ),
             const SizedBox(height: 12),
             _buildStylePicker(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
+
+            // Group picker
+            _buildSectionLabel('Group (Optional)'),
+            const SizedBox(height: 12),
+            _buildGroupPicker(),
+            const SizedBox(height: 28),
+
+            // Explanation style
+            _buildSectionLabel('Explanation Style (Optional)'),
+            const SizedBox(height: 4),
+            Text(
+              'e.g. "Explain in terms of football" or "Use cooking analogies"',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _explanationController,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'How would you like concepts explained?',
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFF667eea)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
 
             // Upload status
             if (reelProvider.uploading || reelProvider.uploadStatus != null)
@@ -338,6 +387,41 @@ class _UploadScreenState extends State<UploadScreen>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildGroupPicker() {
+    final groupProvider = context.watch<GroupProvider>();
+    final groups = groupProvider.groups;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: _selectedGroupId,
+          isExpanded: true,
+          dropdownColor: const Color(0xFF1a1a2e),
+          hint: Text('No group selected',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.4))),
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.white38),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('No group', style: TextStyle(color: Colors.white54)),
+            ),
+            ...groups.map((g) => DropdownMenuItem<String?>(
+                  value: g.id,
+                  child: Text(g.name, style: const TextStyle(color: Colors.white)),
+                )),
+          ],
+          onChanged: (value) => setState(() => _selectedGroupId = value),
+        ),
       ),
     );
   }

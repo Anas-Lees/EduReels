@@ -5,10 +5,12 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/reel_provider.dart';
+import 'providers/group_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/upload_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/groups_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +29,7 @@ class EduReelsApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ReelProvider()),
+        ChangeNotifierProvider(create: (_) => GroupProvider()),
       ],
       child: MaterialApp(
         title: 'EduReels',
@@ -72,6 +75,7 @@ class _MainNavigationState extends State<MainNavigation> {
   final _screens = const [
     HomeScreen(),
     UploadScreen(),
+    GroupsScreen(),
     ProfileScreen(),
   ];
 
@@ -94,6 +98,7 @@ class _MainNavigationState extends State<MainNavigation> {
           onTap: (i) => setState(() => _currentIndex = i),
           backgroundColor: Colors.transparent,
           elevation: 0,
+          type: BottomNavigationBarType.fixed,
           selectedItemColor: const Color(0xFF667eea),
           unselectedItemColor: Colors.white38,
           items: const [
@@ -104,6 +109,10 @@ class _MainNavigationState extends State<MainNavigation> {
             BottomNavigationBarItem(
               icon: Icon(Icons.add_circle_outline, size: 32),
               label: 'Upload',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.folder_rounded),
+              label: 'Groups',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_rounded),
