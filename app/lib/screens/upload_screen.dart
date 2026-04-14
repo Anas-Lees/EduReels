@@ -14,7 +14,6 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen>
     with TickerProviderStateMixin {
-  final _subjectController = TextEditingController();
   String? _selectedFile;
   String? _selectedFileName;
   Uint8List? _selectedFileBytes;
@@ -44,12 +43,6 @@ class _UploadScreenState extends State<UploadScreen>
     'scifi': [Color(0xFF0c0c1d), Color(0xFF1a1a4e)],
   };
 
-  final List<String> _subjects = [
-    'Math', 'Physics', 'Chemistry', 'Biology',
-    'Computer Science', 'History', 'Literature',
-    'Economics', 'Psychology', 'Other',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -64,7 +57,6 @@ class _UploadScreenState extends State<UploadScreen>
 
   @override
   void dispose() {
-    _subjectController.dispose();
     _explanationController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -87,8 +79,16 @@ class _UploadScreenState extends State<UploadScreen>
 
   void _upload() {
     if ((_selectedFile == null && _selectedFileBytes == null) ||
-        _subjectController.text.isEmpty ||
         _selectedGroupId == null) return;
+
+    // Use cleaned PDF name as subject
+    final subject = _selectedFileName
+            ?.replaceAll('.pdf', '')
+            .replaceAll('.PDF', '')
+            .replaceAll('_', ' ')
+            .replaceAll('-', ' ')
+            .trim() ??
+        'General';
 
     // Find the group name for the snackbar
     final groups = context.read<GroupProvider>().groups;
@@ -98,7 +98,7 @@ class _UploadScreenState extends State<UploadScreen>
     context.read<ReelProvider>().uploadPdfStreaming(
           _selectedFile,
           _selectedFileName!,
-          _subjectController.text,
+          subject,
           fileBytes: _selectedFileBytes,
           style: _selectedStyle,
           groupId: _selectedGroupId,
@@ -121,7 +121,6 @@ class _UploadScreenState extends State<UploadScreen>
       _selectedFile = null;
       _selectedFileName = null;
       _selectedFileBytes = null;
-      _subjectController.clear();
       _explanationController.clear();
       _selectedGroupId = null;
       _selectedStyle = 'realistic';
@@ -149,12 +148,6 @@ class _UploadScreenState extends State<UploadScreen>
           children: [
             // Upload area
             _buildUploadArea(reelProvider),
-            const SizedBox(height: 28),
-
-            // Subject picker
-            _buildSectionLabel('Subject'),
-            const SizedBox(height: 12),
-            _buildSubjectPicker(),
             const SizedBox(height: 28),
 
             // Style picker
@@ -331,42 +324,6 @@ class _UploadScreenState extends State<UploadScreen>
                 ],
               ),
       ),
-    );
-  }
-
-  Widget _buildSubjectPicker() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: _subjects.map((subject) {
-        final isSelected = _subjectController.text == subject;
-        return GestureDetector(
-          onTap: () => setState(() => _subjectController.text = subject),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? const Color(0xFF667eea)
-                  : Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected
-                    ? const Color(0xFF667eea)
-                    : Colors.white.withValues(alpha: 0.1),
-              ),
-            ),
-            child: Text(
-              subject,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white60,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 
@@ -638,7 +595,6 @@ class _UploadScreenState extends State<UploadScreen>
 
   Widget _buildGenerateButton(ReelProvider reelProvider) {
     final canUpload = _hasFile &&
-        _subjectController.text.isNotEmpty &&
         _selectedGroupId != null &&
         !reelProvider.uploading;
 
