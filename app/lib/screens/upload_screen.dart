@@ -219,7 +219,7 @@ class _UploadScreenState extends State<UploadScreen>
             const SizedBox(height: 14),
             Center(
               child: Text(
-                'AI generates 5-8 reels with unique visual backgrounds',
+                'AI generates reels for every page of your PDF',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.3),
                   fontSize: 12,

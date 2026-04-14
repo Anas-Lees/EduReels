@@ -95,8 +95,8 @@ class ReelProvider extends ChangeNotifier {
         switch (event.event) {
           case 'start':
             _isGenerating = true;
-            _generatingTotal = event.data['totalConcepts'] ?? 0;
-            _uploadStatus = 'Generating reel 1 of $_generatingTotal...';
+            _totalPages = event.data['totalPages'] ?? 0;
+            _uploadStatus = 'Processing $_totalPages pages...';
             notifyListeners();
             break;
 
@@ -114,20 +114,19 @@ class ReelProvider extends ChangeNotifier {
             _uploading = false;
             _isGenerating = false;
             _uploadStatus =
-                '${event.data['reelCount']} reels created!';
+                '${event.data['totalReels'] ?? _generatingDone} reels created!';
             notifyListeners();
             break;
 
           case 'page_start':
-            _currentPage = event.data['page'] ?? 0;
-            _totalPages = event.data['totalPages'] ?? 0;
-            _uploadStatus = 'Processing page $_currentPage of $_totalPages...';
+            _currentPage = event.data['pageNumber'] ?? 0;
+            _uploadStatus = 'Page $_currentPage of $_totalPages — ${event.data['conceptCount'] ?? 0} concepts found';
             notifyListeners();
             break;
 
           case 'page_done':
-            _currentPage = event.data['page'] ?? _currentPage;
-            _uploadStatus = 'Page $_currentPage processed';
+            _currentPage = event.data['pageNumber'] ?? _currentPage;
+            _uploadStatus = 'Page $_currentPage done';
             notifyListeners();
             break;
 
