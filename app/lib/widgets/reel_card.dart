@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../models/reel.dart';
+import 'source_viewer_sheet.dart';
 
 class ReelCard extends StatefulWidget {
   final Reel reel;
@@ -307,6 +309,18 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
                   color: Colors.white,
                   onTap: widget.onShare,
                 ),
+                const SizedBox(height: 20),
+                _buildActionButton(
+                  icon: Icons.menu_book_rounded,
+                  label: 'Source',
+                  color: Colors.white,
+                  onTap: () => SourceViewerSheet.show(
+                    context,
+                    sourceQuote: widget.reel.sourceQuote,
+                    pageNumber: widget.reel.pageNumber,
+                    reelTitle: widget.reel.title,
+                  ),
+                ),
               ],
             ),
           ),
@@ -368,22 +382,29 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
                 child: child,
               );
             },
-            child: Image.network(
-              slide.imageUrl,
+            child: CachedNetworkImage(
+              imageUrl: slide.imageUrl,
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: _gradient),
-                  ),
-                );
-              },
-              errorBuilder: (_, __, ___) => Container(
+              httpHeaders: const {'User-Agent': 'EduReels/1.0'},
+              fadeInDuration: const Duration(milliseconds: 300),
+              placeholder: (context, url) => Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: _gradient),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: _gradient,
+                  ),
+                ),
+              ),
+              errorWidget: (_, __, ___) => Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: _gradient,
+                  ),
                 ),
               ),
             ),
@@ -509,10 +530,16 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
       fit: StackFit.expand,
       children: [
         if (hasImage)
-          Image.network(
-            lastSlide!.imageUrl,
+          CachedNetworkImage(
+            imageUrl: lastSlide!.imageUrl,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const SizedBox(),
+            httpHeaders: const {'User-Agent': 'EduReels/1.0'},
+            fadeInDuration: const Duration(milliseconds: 300),
+            errorWidget: (_, __, ___) => Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: _gradient),
+              ),
+            ),
           ),
         Container(color: Colors.black.withValues(alpha: hasImage ? 0.65 : 0.0)),
 
@@ -634,14 +661,15 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
 
   List<Widget> _buildParticles() {
     final t = _particleController.value;
+    final screenSize = MediaQuery.sizeOf(context);
     return _particles.map((p) {
       final x = p.x + sin((t + p.phase) * pi * 2) * p.drift;
       final y = (p.y - t * p.speed * 0.3) % 1.0;
       final opacity = (sin((t + p.phase) * pi * 2) * 0.5 + 0.5) * p.maxOpacity;
 
       return Positioned(
-        left: x * MediaQuery.of(context).size.width,
-        top: y * MediaQuery.of(context).size.height,
+        left: x * screenSize.width,
+        top: y * screenSize.height,
         child: Container(
           width: p.size,
           height: p.size,

@@ -38,7 +38,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return _user != null;
     } catch (e) {
-      _error = e.toString();
+      _error = _parseGoogleError(e);
       _loading = false;
       notifyListeners();
       return false;
@@ -109,5 +109,22 @@ class AuthProvider extends ChangeNotifier {
       }
     }
     return 'Something went wrong. Please try again.';
+  }
+
+  String _parseGoogleError(dynamic e) {
+    final msg = e.toString();
+    if (msg.contains('sign_in_failed') || msg.contains('api.j: 10')) {
+      return 'Google Sign-In is not configured for this device. Please use email/password instead.';
+    }
+    if (msg.contains('network_error') || msg.contains('ApiException: 7')) {
+      return 'Network error. Check your internet connection.';
+    }
+    if (msg.contains('sign_in_cancelled') || msg.contains('ApiException: 12501')) {
+      return null ?? 'Sign-in was cancelled.';
+    }
+    if (msg.contains('popup_closed') || msg.contains('popup-closed-by-user')) {
+      return 'Sign-in popup was closed. Please try again.';
+    }
+    return 'Google Sign-In failed. Please try email/password.';
   }
 }

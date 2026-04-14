@@ -33,16 +33,28 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-// GET /api/reels/my - Get current user's reels
+// GET /api/reels/my - Get current user's reels (paginated)
 router.get('/my', verifyToken, async (req, res) => {
   try {
-    const snapshot = await db.collection('reels')
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const lastId = req.query.lastId;
+
+    let query = db.collection('reels')
       .where('userId', '==', req.user.uid)
-      .get();
+      .orderBy('createdAt', 'desc')
+      .limit(limit);
+
+    if (lastId) {
+      const lastDoc = await db.collection('reels').doc(lastId).get();
+      if (lastDoc.exists) {
+        query = query.startAfter(lastDoc);
+      }
+    }
+
+    const snapshot = await query.get();
 
     const reels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    reels.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    res.json({ reels });
+    res.json({ reels, hasMore: reels.length === limit });
   } catch (error) {
     console.error('My reels error:', error);
     res.status(500).json({ error: 'Failed to load your reels' });
@@ -80,13 +92,27 @@ router.post('/:id/like', verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/reels/:id/view - Track view
+// POST /api/reels/:id/view - Track view (deduplicated per user per reel)
 router.post('/:id/view', verifyToken, async (req, res) => {
   try {
-    const reelRef = db.collection('reels').doc(req.params.id);
-    await reelRef.update({
-      views: FieldValue.increment(1),
-    });
+    const reelId = req.params.id;
+    const userId = req.user.uid;
+
+    // Check reel exists
+    const reelRef = db.collection('reels').doc(reelId);
+    const reelDoc = await reelRef.get();
+    if (!reelDoc.exists) {
+      return res.status(404).json({ error: 'Reel not found' });
+    }
+
+    // Deduplicate: only count one view per user per reel
+    const viewRef = db.collection('views').doc(`${userId}_${reelId}`);
+    const viewDoc = await viewRef.get();
+    if (!viewDoc.exists) {
+      await viewRef.set({ userId, reelId, createdAt: new Date().toISOString() });
+      await reelRef.update({ views: FieldValue.increment(1) });
+    }
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to track view' });

@@ -60,9 +60,18 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// GET /api/groups/:id/reels - Get reels in a group
+// GET /api/groups/:id/reels - Get reels in a group (owner only)
 router.get('/:id/reels', verifyToken, async (req, res) => {
   try {
+    // Verify the user owns this group before returning its reels
+    const groupDoc = await db.collection('groups').doc(req.params.id).get();
+    if (!groupDoc.exists) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    if (groupDoc.data().userId !== req.user.uid) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
     const snapshot = await db.collection('reels')
       .where('groupId', '==', req.params.id)
       .get();

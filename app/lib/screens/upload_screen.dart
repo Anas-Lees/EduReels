@@ -2,10 +2,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/reel_provider.dart';
 import '../providers/group_provider.dart';
-import '../models/group.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -89,8 +87,14 @@ class _UploadScreenState extends State<UploadScreen>
 
   void _upload() {
     if ((_selectedFile == null && _selectedFileBytes == null) ||
-        _subjectController.text.isEmpty) return;
+        _subjectController.text.isEmpty ||
+        _selectedGroupId == null) return;
 
+    // Find the group name for the snackbar
+    final groups = context.read<GroupProvider>().groups;
+    final groupName = groups.where((g) => g.id == _selectedGroupId).map((g) => g.name).firstOrNull ?? 'group';
+
+    // Start streaming upload (runs in background via provider)
     context.read<ReelProvider>().uploadPdfStreaming(
           _selectedFile,
           _selectedFileName!,
@@ -100,6 +104,28 @@ class _UploadScreenState extends State<UploadScreen>
           groupId: _selectedGroupId,
           explanationStyle: _explanationController.text.isNotEmpty ? _explanationController.text : null,
         );
+
+    // Show a brief non-blocking snackbar and reset form
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Generating reels in "$groupName"...'),
+        backgroundColor: const Color(0xFF667eea),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+
+    // Reset form so user can navigate away
+    setState(() {
+      _selectedFile = null;
+      _selectedFileName = null;
+      _selectedFileBytes = null;
+      _subjectController.clear();
+      _explanationController.clear();
+      _selectedGroupId = null;
+      _selectedStyle = 'realistic';
+    });
   }
 
   bool get _hasFile => _selectedFile != null || _selectedFileBytes != null;
@@ -143,7 +169,7 @@ class _UploadScreenState extends State<UploadScreen>
             const SizedBox(height: 28),
 
             // Group picker
-            _buildSectionLabel('Group (Optional)'),
+            _buildSectionLabel('Group'),
             const SizedBox(height: 12),
             _buildGroupPicker(),
             const SizedBox(height: 28),
@@ -190,16 +216,17 @@ class _UploadScreenState extends State<UploadScreen>
 
             // Generate button
             _buildGenerateButton(reelProvider),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Center(
               child: Text(
                 'AI generates 5-8 reels with unique visual backgrounds',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.3),
+                  fontSize: 12,
                 ),
               ),
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -209,10 +236,11 @@ class _UploadScreenState extends State<UploadScreen>
   Widget _buildSectionLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 16,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.9),
+        fontSize: 15,
         fontWeight: FontWeight.w600,
+        letterSpacing: 0.2,
       ),
     );
   }
@@ -223,54 +251,85 @@ class _UploadScreenState extends State<UploadScreen>
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         width: double.infinity,
-        height: 180,
+        height: 160,
         decoration: BoxDecoration(
           gradient: _hasFile
               ? LinearGradient(
                   colors: [
-                    const Color(0xFF667eea).withValues(alpha: 0.2),
-                    const Color(0xFF764ba2).withValues(alpha: 0.2),
+                    const Color(0xFF667eea).withValues(alpha: 0.15),
+                    const Color(0xFF764ba2).withValues(alpha: 0.15),
                   ],
                 )
               : null,
-          color: _hasFile ? null : Colors.white.withValues(alpha: 0.04),
+          color: _hasFile ? null : Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: _hasFile
                 ? const Color(0xFF667eea).withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.1),
-            width: 2,
+                : Colors.white.withValues(alpha: 0.08),
+            width: _hasFile ? 2 : 1.5,
           ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _hasFile ? Icons.picture_as_pdf_rounded : Icons.cloud_upload_rounded,
-              size: 48,
-              color: _hasFile ? const Color(0xFF667eea) : Colors.white30,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _selectedFileName ?? 'Tap to select PDF',
-              style: TextStyle(
-                color: _hasFile ? Colors.white : Colors.white54,
-                fontSize: 16,
-                fontWeight: _hasFile ? FontWeight.w600 : FontWeight.normal,
+        child: _hasFile
+            ? Row(
+                children: [
+                  const SizedBox(width: 24),
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF667eea).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.picture_as_pdf_rounded, size: 28, color: Color(0xFF667eea)),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _selectedFileName ?? '',
+                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tap to change file',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.swap_horiz_rounded, color: Colors.white.withValues(alpha: 0.25), size: 22),
+                  const SizedBox(width: 20),
+                ],
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.cloud_upload_rounded, size: 32, color: Colors.white.withValues(alpha: 0.35)),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Tap to select PDF',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 15, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'PDF up to 50MB',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 12),
+                  ),
+                ],
               ),
-            ),
-            if (!_hasFile) ...[
-              const SizedBox(height: 4),
-              Text(
-                'PDF up to 50MB',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -395,6 +454,30 @@ class _UploadScreenState extends State<UploadScreen>
     final groupProvider = context.watch<GroupProvider>();
     final groups = groupProvider.groups;
 
+    if (groups.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: Colors.orange.withValues(alpha: 0.7), size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Create a group first from the Groups tab to upload PDFs.',
+                style: TextStyle(color: Colors.orange.withValues(alpha: 0.8), fontSize: 13, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
@@ -407,19 +490,13 @@ class _UploadScreenState extends State<UploadScreen>
           value: _selectedGroupId,
           isExpanded: true,
           dropdownColor: const Color(0xFF1a1a2e),
-          hint: Text('No group selected',
+          hint: Text('Select a group',
               style: TextStyle(color: Colors.white.withValues(alpha: 0.4))),
           icon: const Icon(Icons.arrow_drop_down, color: Colors.white38),
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('No group', style: TextStyle(color: Colors.white54)),
-            ),
-            ...groups.map((g) => DropdownMenuItem<String?>(
-                  value: g.id,
-                  child: Text(g.name, style: const TextStyle(color: Colors.white)),
-                )),
-          ],
+          items: groups.map((g) => DropdownMenuItem<String?>(
+                value: g.id,
+                child: Text(g.name, style: const TextStyle(color: Colors.white)),
+              )).toList(),
           onChanged: (value) => setState(() => _selectedGroupId = value),
         ),
       ),
@@ -462,6 +539,38 @@ class _UploadScreenState extends State<UploadScreen>
               },
             ),
             const SizedBox(height: 16),
+          ] else if (reelProvider.totalPages > 0 && reelProvider.uploading) ...[
+            // Page processing progress bar
+            TweenAnimationBuilder<double>(
+              tween: Tween(
+                begin: 0,
+                end: reelProvider.totalPages > 0
+                    ? reelProvider.currentPage / reelProvider.totalPages
+                    : 0.0,
+              ),
+              duration: const Duration(milliseconds: 500),
+              builder: (context, value, _) {
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: value,
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFF43e97b)),
+                    minHeight: 6,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Page ${reelProvider.currentPage} of ${reelProvider.totalPages}',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 12),
           ] else if (reelProvider.uploading) ...[
             AnimatedBuilder(
               animation: _pulseController,
@@ -530,6 +639,7 @@ class _UploadScreenState extends State<UploadScreen>
   Widget _buildGenerateButton(ReelProvider reelProvider) {
     final canUpload = _hasFile &&
         _subjectController.text.isNotEmpty &&
+        _selectedGroupId != null &&
         !reelProvider.uploading;
 
     return SizedBox(

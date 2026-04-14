@@ -8,10 +8,12 @@ const { verifyToken } = require('../middleware/auth');
 const {
   generateReelsFromText,
   extractConcepts,
+  extractConceptsFromPage,
   generateSingleReel,
   generateVideoReel,
   STYLE_PRESETS,
 } = require('../services/claude-service');
+const { extractPages } = require('../utils/pdf-extractor');
 const { db, admin } = require('../config/firebase');
 
 const router = express.Router();
@@ -47,10 +49,13 @@ function sendSSE(res, event, data) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-// POST /api/upload/stream - SSE streaming reel generation
+// POST /api/upload/stream - SSE streaming reel generation (page-by-page)
 router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
   let aborted = false;
   req.on('close', () => { aborted = true; });
+
+  // Keepalive interval handle
+  let keepaliveInterval = null;
 
   try {
     if (!req.file) {
@@ -63,13 +68,21 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     const explanationStyle = req.body.explanationStyle || '';
     const filePath = req.file.path;
 
-    // Parse PDF
+    // Parse PDF page by page
     const pdfBuffer = fs.readFileSync(filePath);
-    const pdfData = await pdfParse(pdfBuffer);
+    const pages = await extractPages(pdfBuffer);
 
-    if (!pdfData.text || pdfData.text.trim().length < 50) {
+    if (!pages || pages.length === 0) {
       fs.unlinkSync(filePath);
-      return res.status(400).json({ error: 'PDF has too little text content' });
+      return res.status(400).json({ error: 'PDF has too little text content (no pages with 100+ chars)' });
+    }
+
+    // Enforce max 100 pages
+    const MAX_PAGES = 100;
+    let truncated = false;
+    if (pages.length > MAX_PAGES) {
+      truncated = true;
+      pages.length = MAX_PAGES;
     }
 
     // Set SSE headers
@@ -81,70 +94,131 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     });
     res.flushHeaders();
 
-    // Step 1: Extract concepts (fast ~2s)
-    const concepts = await extractConcepts(pdfData.text, subject, explanationStyle);
+    // Start keepalive comments every 15s
+    keepaliveInterval = setInterval(() => {
+      if (!aborted) {
+        res.write(': keepalive\n\n');
+      }
+    }, 15000);
+
     const uploadId = uuidv4();
     const reelIds = [];
+    const allConceptTitles = []; // Track titles across pages to avoid duplicates
+    let totalReelCount = 0;
 
-    sendSSE(res, 'start', { totalConcepts: concepts.length, uploadId });
+    sendSSE(res, 'start', {
+      totalPages: pages.length,
+      uploadId,
+      truncated: truncated ? `PDF truncated to ${MAX_PAGES} pages` : undefined,
+    });
 
-    if (aborted) { fs.unlinkSync(filePath); return res.end(); }
+    if (aborted) { fs.unlinkSync(filePath); clearInterval(keepaliveInterval); return res.end(); }
 
-    // Step 2: Generate reels in parallel batches of 3 for speed
-    const BATCH_SIZE = 3;
-    for (let batchStart = 0; batchStart < concepts.length; batchStart += BATCH_SIZE) {
+    // Process each page
+    for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
       if (aborted) break;
 
-      const batch = concepts.slice(batchStart, batchStart + BATCH_SIZE);
-      const promises = batch.map((concept, offset) => {
-        const i = batchStart + offset;
-        const isVideo = (i % 3 === 1);
-        const genFn = isVideo
-          ? generateVideoReel(concept, pdfData.text, subject, style, explanationStyle)
-          : generateSingleReel(concept, pdfData.text, subject, style, explanationStyle);
-        return genFn
-          .then(data => ({ data, index: i, isVideo }))
-          .catch(err => ({ error: err, index: i, isVideo: false }));
+      const page = pages[pageIdx];
+
+      // Extract concepts from this page
+      let concepts;
+      try {
+        concepts = await extractConceptsFromPage(
+          page.text,
+          page.pageNum,
+          subject,
+          allConceptTitles,
+          explanationStyle
+        );
+      } catch (err) {
+        console.error(`Error extracting concepts from page ${page.pageNum}:`, err.message);
+        sendSSE(res, 'error', { message: `Page ${page.pageNum}: ${err.message}`, pageNumber: page.pageNum });
+        continue;
+      }
+
+      if (!concepts || concepts.length === 0) {
+        sendSSE(res, 'page_done', { pageNumber: page.pageNum, reelCount: 0 });
+        continue;
+      }
+
+      sendSSE(res, 'page_start', {
+        pageNumber: page.pageNum,
+        pageText: page.text.substring(0, 200),
+        conceptCount: concepts.length,
       });
 
-      const results = await Promise.all(promises);
+      // Add new concept titles to dedup list
+      concepts.forEach(c => allConceptTitles.push(c.title));
 
-      // Process results in order
-      for (const result of results) {
+      // Generate reels for this page's concepts in parallel batches of 3
+      const BATCH_SIZE = 3;
+      let pageReelCount = 0;
+
+      for (let batchStart = 0; batchStart < concepts.length; batchStart += BATCH_SIZE) {
         if (aborted) break;
 
-        if (result.error) {
-          console.error(`Error generating reel ${result.index + 1}:`, result.error.message);
-          sendSSE(res, 'error', { message: result.error.message, index: result.index });
-          continue;
+        const batch = concepts.slice(batchStart, batchStart + BATCH_SIZE);
+        const promises = batch.map((concept, offset) => {
+          const globalIdx = totalReelCount + batchStart + offset;
+          const isVideo = (globalIdx % 3 === 1);
+          const genFn = isVideo
+            ? generateVideoReel(concept.title, page.text, subject, style, explanationStyle, concept.sourceQuote || '', concept.pageNumber)
+            : generateSingleReel(concept.title, page.text, subject, style, explanationStyle, concept.sourceQuote || '', concept.pageNumber);
+          return genFn
+            .then(data => ({ data, concept, isVideo }))
+            .catch(err => ({ error: err, concept, isVideo: false }));
+        });
+
+        const results = await Promise.all(promises);
+
+        for (const result of results) {
+          if (aborted) break;
+
+          if (result.error) {
+            console.error(`Error generating reel for "${result.concept.title}":`, result.error.message);
+            sendSSE(res, 'error', { message: result.error.message, concept: result.concept.title });
+            continue;
+          }
+
+          const reelId = uuidv4();
+          const reelDoc = {
+            id: reelId,
+            userId: req.user.uid,
+            title: result.data.title,
+            slides: result.data.slides || [],
+            scenes: result.data.scenes || [],
+            narration: result.data.narration,
+            quiz: result.data.quiz,
+            tags: result.data.tags || [],
+            subject,
+            style,
+            type: result.isVideo ? 'video' : 'card',
+            likes: 0,
+            views: 0,
+            createdAt: new Date().toISOString(),
+            pdfName: req.file.originalname,
+            groupId: groupId || '',
+            explanationStyle: explanationStyle || '',
+            sourceQuote: result.data.sourceQuote || '',
+            pageNumber: result.data.pageNumber || null,
+          };
+
+          await db.collection('reels').doc(reelId).set(reelDoc);
+          reelIds.push(reelId);
+          pageReelCount++;
+
+          sendSSE(res, 'reel', reelDoc);
+          console.log(`Generated reel: ${result.data.title} (page ${page.pageNum}, ${result.isVideo ? 'video' : 'card'}) [${style}]`);
         }
+      }
 
-        const reelId = uuidv4();
-        const reelDoc = {
-          id: reelId,
-          userId: req.user.uid,
-          title: result.data.title,
-          slides: result.data.slides || [],
-          scenes: result.data.scenes || [],
-          narration: result.data.narration,
-          quiz: result.data.quiz,
-          tags: result.data.tags || [],
-          subject,
-          style,
-          type: result.isVideo ? 'video' : 'card',
-          likes: 0,
-          views: 0,
-          createdAt: new Date().toISOString(),
-          pdfName: req.file.originalname,
-          groupId: groupId || '',
-          explanationStyle: explanationStyle || '',
-        };
+      totalReelCount += pageReelCount;
 
-        await db.collection('reels').doc(reelId).set(reelDoc);
-        reelIds.push(reelId);
+      sendSSE(res, 'page_done', { pageNumber: page.pageNum, reelCount: pageReelCount });
 
-        sendSSE(res, 'reel', reelDoc);
-        console.log(`Generated reel ${result.index + 1}/${concepts.length}: ${result.data.title} (${result.isVideo ? 'video' : 'card'}) [${style}]`);
+      // Delay between pages to avoid Groq rate limits
+      if (pageIdx < pages.length - 1 && !aborted) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -173,11 +247,13 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
 
     // Clean up
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    clearInterval(keepaliveInterval);
 
-    sendSSE(res, 'done', { reelCount: reelIds.length, uploadId });
+    sendSSE(res, 'done', { totalReels: reelIds.length, uploadId });
     res.end();
   } catch (error) {
     console.error('Stream upload error:', error.message);
+    if (keepaliveInterval) clearInterval(keepaliveInterval);
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
@@ -242,6 +318,8 @@ router.post('/', verifyToken, upload.single('pdf'), async (req, res) => {
         pdfName: req.file.originalname,
         groupId: groupId || '',
         explanationStyle: explanationStyle || '',
+        sourceQuote: reel.sourceQuote || '',
+        pageNumber: reel.pageNumber || null,
       });
 
       reelIds.push(reelId);

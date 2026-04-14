@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/reel.dart';
+import 'source_viewer_sheet.dart';
 
 class VideoReelCard extends StatefulWidget {
   final Reel reel;
@@ -202,16 +204,23 @@ class _VideoReelCardState extends State<VideoReelCard>
                       ..scale(scale, scale)
                       ..translate(panX, panY),
                     alignment: Alignment.center,
-                    child: Image.network(
-                      scene.imageUrl,
+                    child: CachedNetworkImage(
+                      imageUrl: scene.imageUrl,
                       fit: BoxFit.cover,
                       width: double.infinity,
                       height: double.infinity,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const SizedBox.expand();
-                      },
-                      errorBuilder: (_, __, ___) => const SizedBox.expand(),
+                      httpHeaders: const {'User-Agent': 'EduReels/1.0'},
+                      fadeInDuration: const Duration(milliseconds: 300),
+                      placeholder: (context, url) => Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [color1, color2]),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [color1, color2]),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -339,6 +348,18 @@ class _VideoReelCardState extends State<VideoReelCard>
                       label: 'Share',
                       color: Colors.white,
                       onTap: widget.onShare,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildActionButton(
+                      icon: Icons.menu_book_rounded,
+                      label: 'Source',
+                      color: Colors.white,
+                      onTap: () => SourceViewerSheet.show(
+                        context,
+                        sourceQuote: widget.reel.sourceQuote,
+                        pageNumber: widget.reel.pageNumber,
+                        reelTitle: widget.reel.title,
+                      ),
                     ),
                   ],
                 ),
@@ -481,14 +502,15 @@ class _VideoReelCardState extends State<VideoReelCard>
   // Floating particles for cinematic feel
   List<Widget> _buildParticles() {
     final t = _particleController.value;
+    final screenSize = MediaQuery.sizeOf(context);
     return _particles.map((p) {
       final x = p.x + sin((t + p.phase) * pi * 2) * p.drift;
       final y = (p.y - t * p.speed * 0.3) % 1.0;
       final opacity = (sin((t + p.phase) * pi * 2) * 0.5 + 0.5) * p.maxOpacity;
 
       return Positioned(
-        left: x * MediaQuery.of(context).size.width,
-        top: y * MediaQuery.of(context).size.height,
+        left: x * screenSize.width,
+        top: y * screenSize.height,
         child: Container(
           width: p.size,
           height: p.size,
@@ -565,10 +587,12 @@ class _VideoReelCardState extends State<VideoReelCard>
       fit: StackFit.expand,
       children: [
         if (hasImage)
-          Image.network(
-            lastScene!.imageUrl,
+          CachedNetworkImage(
+            imageUrl: lastScene!.imageUrl,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [color1, color2]))),
+            httpHeaders: const {'User-Agent': 'EduReels/1.0'},
+            fadeInDuration: const Duration(milliseconds: 300),
+            errorWidget: (_, __, ___) => Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [color1, color2]))),
           )
         else
           Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [color1, color2]))),

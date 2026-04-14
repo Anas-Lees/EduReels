@@ -11,8 +11,21 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+app.use(cors({
+  origin: allowedOrigins.length > 0
+    ? (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl) and listed origins
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+    : true, // fallback to allow-all if no env var set (dev mode)
+  credentials: true,
+}));
+app.use(express.json({ limit: '10mb' }));
 
 // Request logging
 app.use((req, res, next) => {
@@ -25,16 +38,36 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/reels', reelRoutes);
 app.use('/api/groups', groupRoutes);
 
+// Simple in-memory rate limiter for image proxy
+const imageRateLimit = {};
+const IMAGE_RATE_WINDOW = 60000; // 1 minute
+const IMAGE_RATE_MAX = 30; // max 30 requests per minute per IP
+
 // Image proxy - bypasses CORS for AI images with retry + fallback
 app.get('/api/image', async (req, res) => {
   try {
+    // Rate limit by IP
+    const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+    if (!imageRateLimit[clientIp] || now - imageRateLimit[clientIp].start > IMAGE_RATE_WINDOW) {
+      imageRateLimit[clientIp] = { start: now, count: 0 };
+    }
+    imageRateLimit[clientIp].count++;
+    if (imageRateLimit[clientIp].count > IMAGE_RATE_MAX) {
+      return res.status(429).json({ error: 'Too many image requests. Please wait.' });
+    }
+
     const prompt = req.query.prompt;
     if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
 
-    const width = req.query.width || 720;
-    const height = req.query.height || 1280;
-    const seed = req.query.seed || '42';
-    const encoded = encodeURIComponent(prompt);
+    // Sanitize prompt: limit length and strip control characters
+    if (prompt.length > 500) return res.status(400).json({ error: 'Prompt too long (max 500 chars)' });
+    const sanitizedPrompt = prompt.replace(/[\x00-\x1f]/g, '');
+
+    const width = Math.min(parseInt(req.query.width) || 720, 1920);
+    const height = Math.min(parseInt(req.query.height) || 1280, 1920);
+    const seed = (req.query.seed || '42').replace(/[^0-9]/g, '').substring(0, 10) || '42';
+    const encoded = encodeURIComponent(sanitizedPrompt);
 
     const fetch = (await import('node-fetch')).default;
 
@@ -62,7 +95,7 @@ app.get('/api/image', async (req, res) => {
     }
 
     // Fallback: loremflickr with keywords extracted from prompt for relevant images
-    const keywords = prompt.replace(/[^a-zA-Z ]/g, '').split(' ').filter(w => w.length > 3).slice(0, 3).join(',') || 'education,learning';
+    const keywords = sanitizedPrompt.replace(/[^a-zA-Z ]/g, '').split(' ').filter(w => w.length > 3).slice(0, 3).join(',') || 'education,learning';
     const fallbackUrl = `https://loremflickr.com/${width}/${height}/${encodeURIComponent(keywords)}`;
     const fallback = await fetch(fallbackUrl, { redirect: 'follow', timeout: 10000 });
     if (fallback.ok) {

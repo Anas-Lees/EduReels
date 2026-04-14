@@ -26,8 +26,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1a2e),
-        title: const Text('Create Group', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF141428),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Create Group', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -36,13 +38,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'e.g. Subject 355',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
             const SizedBox(height: 12),
@@ -51,21 +54,23 @@ class _GroupsScreenState extends State<GroupsScreen> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Description (optional)',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ],
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -79,13 +84,26 @@ class _GroupsScreenState extends State<GroupsScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF667eea),
               foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Create'),
+            child: const Text('Create', style: TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
+  }
+
+  String _formatDate(String dateStr) {
+    if (dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (_) {
+      return dateStr;
+    }
   }
 
   @override
@@ -95,37 +113,62 @@ class _GroupsScreenState extends State<GroupsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0a0a1a),
       appBar: AppBar(
-        title: const Text('My Groups', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Your Library', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24, letterSpacing: -0.5)),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateDialog,
         backgroundColor: const Color(0xFF667eea),
-        child: const Icon(Icons.add, color: Colors.white),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: const Icon(Icons.add_rounded, color: Colors.white),
       ),
       body: groupProvider.loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF667eea)))
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 36, height: 36,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Color(0xFF667eea),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Loading groups...', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14)),
+                ],
+              ),
+            )
           : groupProvider.groups.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF667eea).withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(26),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF667eea).withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF667eea).withValues(alpha: 0.15),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(Icons.folder_open_rounded, size: 52, color: Color(0xFF667eea)),
                         ),
-                        child: const Icon(Icons.folder_open, size: 64, color: Color(0xFF667eea)),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text('No groups yet',
-                          style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Text('Create a group to organize your lectures',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 16)),
-                    ],
+                        const SizedBox(height: 28),
+                        const Text('No groups yet',
+                            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+                        const SizedBox(height: 10),
+                        Text('Create a group to organize your lectures',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 15, height: 1.4)),
+                      ],
+                    ),
                   ),
                 )
               : ListView.builder(
@@ -144,72 +187,93 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         showDialog(
                           context: context,
                           builder: (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFF1a1a2e),
-                            title: const Text('Delete Group?', style: TextStyle(color: Colors.white)),
+                            backgroundColor: const Color(0xFF141428),
+                            surfaceTintColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: const Text('Delete Group?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20)),
                             content: Text('This will remove "${group.name}" but keep all its reels.',
-                                style: const TextStyle(color: Colors.white70)),
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), height: 1.4)),
+                            actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(ctx),
-                                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                                child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
                               ),
                               ElevatedButton(
                                 onPressed: () {
                                   context.read<GroupProvider>().deleteGroup(group.id);
                                   Navigator.pop(ctx);
                                 },
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                                child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                               ),
                             ],
                           ),
                         );
                       },
                       child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(20),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              const Color(0xFF667eea).withValues(alpha: 0.15),
-                              const Color(0xFF764ba2).withValues(alpha: 0.1),
-                            ],
-                          ),
+                          color: Colors.white.withValues(alpha: 0.04),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFF667eea).withValues(alpha: 0.2)),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                         ),
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(11),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF667eea).withValues(alpha: 0.2),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    const Color(0xFF667eea).withValues(alpha: 0.2),
+                                    const Color(0xFF764ba2).withValues(alpha: 0.15),
+                                  ],
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.folder, color: Color(0xFF667eea), size: 28),
+                              child: const Icon(Icons.folder_rounded, color: Color(0xFF667eea), size: 24),
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(group.name,
                                       style: const TextStyle(
-                                          color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                          color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                                   if (group.description.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 3),
                                     Text(group.description,
-                                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 14),
+                                        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis),
                                   ],
-                                  const SizedBox(height: 6),
-                                  Text('${group.reelCount} reels',
-                                      style: TextStyle(color: const Color(0xFF667eea).withValues(alpha: 0.8), fontSize: 13)),
+                                  const SizedBox(height: 5),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.play_circle_outline_rounded, size: 14, color: const Color(0xFF667eea).withValues(alpha: 0.7)),
+                                      const SizedBox(width: 4),
+                                      Text('${group.reelCount} reels',
+                                          style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
+                                      const SizedBox(width: 12),
+                                      Icon(Icons.access_time_rounded, size: 13, color: Colors.white.withValues(alpha: 0.25)),
+                                      const SizedBox(width: 4),
+                                      Text(_formatDate(group.createdAt),
+                                          style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 12)),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
-                            const Icon(Icons.chevron_right, color: Colors.white24),
+                            Icon(Icons.chevron_right_rounded, color: Colors.white.withValues(alpha: 0.15), size: 22),
                           ],
                         ),
                       ),

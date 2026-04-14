@@ -7,7 +7,6 @@ import 'providers/auth_provider.dart';
 import 'providers/reel_provider.dart';
 import 'providers/group_provider.dart';
 import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/upload_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/groups_screen.dart';
@@ -73,9 +72,8 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
 
   final _screens = const [
-    HomeScreen(),
-    UploadScreen(),
     GroupsScreen(),
+    UploadScreen(),
     ProfileScreen(),
   ];
 
@@ -103,16 +101,12 @@ class _MainNavigationState extends State<MainNavigation> {
           unselectedItemColor: Colors.white38,
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              label: 'Feed',
+              icon: Icon(Icons.library_books_rounded),
+              label: 'Groups',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.add_circle_outline, size: 32),
               label: 'Upload',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.folder_rounded),
-              label: 'Groups',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_rounded),

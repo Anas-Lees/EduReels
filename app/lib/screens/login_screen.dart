@@ -78,16 +78,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Error message
                   if (auth.error != null)
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.2),
+                        color: Colors.red.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                       ),
-                      child: Text(
-                        auth.error!,
-                        style: const TextStyle(color: Colors.white),
-                        textAlign: TextAlign.center,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.white70, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              auth.error!,
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 
@@ -250,11 +258,37 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) return;
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter both email and password'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     if (_isSignUp) {
       final name = _nameController.text.trim();
-      if (name.isEmpty) return;
+      if (name.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter your name'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
       auth.signUpWithEmail(email, password, name);
     } else {
       auth.signInWithEmail(email, password);

@@ -39,7 +39,53 @@ function getStyleDesc(style) {
   return STYLE_PRESETS[style] || STYLE_PRESETS.realistic;
 }
 
-// Step 1: Fast concept extraction
+// Step 1b: Extract concepts from a single page (new page-by-page approach)
+async function extractConceptsFromPage(pageText, pageNum, subject = 'General', previousConcepts = [], explanationStyle = '') {
+  const styleInstruction = explanationStyle
+    ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
+    : '';
+  const dedupInstruction = previousConcepts.length > 0
+    ? `\nIMPORTANT: The following concepts have ALREADY been extracted from previous pages. Do NOT repeat them or create overlapping concepts:\n${previousConcepts.map(c => `- ${c}`).join('\n')}\n`
+    : '';
+  const prompt = `You are an educational content analyzer. Given this single page from a study material, identify ALL important concepts that would make great short educational reels.
+
+Subject: ${subject}
+Page Number: ${pageNum}
+
+Page Text:
+${pageText}
+${styleInstruction}${dedupInstruction}
+For each concept, include an exact verbatim quote (2-4 sentences) from the page text that the concept is based on.
+
+Return ONLY valid JSON:
+{
+  "concepts": [
+    {
+      "title": "Concept Title: One line description of what to teach",
+      "sourceQuote": "exact verbatim quote from the page text that this concept is based on (2-4 sentences)",
+      "pageNumber": ${pageNum}
+    }
+  ]
+}
+
+If this page has no meaningful educational concepts, return: { "concepts": [] }`;
+
+  try {
+    const text = await chatComplete(prompt);
+    const data = parseJsonResponse(text);
+    if (!data.concepts || !Array.isArray(data.concepts)) {
+      throw new Error('AI response missing concepts array');
+    }
+    // Ensure pageNumber is set on every concept
+    data.concepts.forEach(c => { c.pageNumber = pageNum; });
+    return data.concepts;
+  } catch (e) {
+    throw new Error(`Page concept extraction failed (page ${pageNum}): ${e.message}`);
+  }
+}
+
+// DEPRECATED: Use extractConceptsFromPage for page-by-page extraction instead
+// Step 1: Fast concept extraction (legacy bulk approach)
 async function extractConcepts(pdfText, subject = 'General', explanationStyle = '') {
   const styleInstruction = explanationStyle
     ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
@@ -72,16 +118,19 @@ Return ONLY valid JSON:
 }
 
 // Step 2: Generate a single card reel for one concept
-async function generateSingleReel(concept, pdfText, subject = 'General', style = 'realistic', explanationStyle = '') {
+async function generateSingleReel(concept, pdfText, subject = 'General', style = 'realistic', explanationStyle = '', sourceQuote = '', pageNumber = null) {
   const styleDesc = getStyleDesc(style);
   const styleInstruction = explanationStyle
     ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
+    : '';
+  const sourceContext = sourceQuote
+    ? `\nSource Quote (base your reel on this): "${sourceQuote}"\n`
     : '';
   const prompt = `You are an educational content creator making a viral study reel about this specific concept.
 
 Concept: ${concept}
 Subject: ${subject}
-
+${sourceContext}
 Reference material (use relevant parts):
 ${pdfText.substring(0, 6000)}
 
@@ -91,7 +140,7 @@ Create ONE educational reel with 3-5 slides. Rules:
 - Add relevant emojis
 - Include a quiz at the end with an explanation of the correct answer
 - Narration should be conversational, like a friendly tutor
-- For EACH slide, generate an "imagePrompt": a detailed visual description (30-60 words) for an AI image generator to create a stunning background. Style: ${styleDesc}. Do NOT include any text, letters, numbers or words in the image description - describe only visual scenes, objects, and atmosphere that relate to the slide content.
+- For EACH slide, generate an "imagePrompt": a detailed visual description (40-80 words) for an AI image generator to create a stunning background. Style: ${styleDesc}. Describe a specific scene with concrete subjects, lighting, and atmosphere. Avoid generic stock-photo descriptions. Each image must be unique and vivid - translate abstract concepts into concrete visual metaphors. NEVER include text, words, letters, numbers, or labels in the image description - describe only visual scenes, objects, and atmosphere that relate to the slide content.
 ${styleInstruction}
 Return ONLY valid JSON:
 {
@@ -106,6 +155,8 @@ Return ONLY valid JSON:
     "answer": 0,
     "explanation": "Brief explanation of why the correct answer is right (1-2 sentences)"
   },
+  "sourceQuote": "${sourceQuote ? 'included' : ''}",
+  "pageNumber": ${pageNumber || 'null'},
   "tags": ["tag1", "tag2"]
 }`;
 
@@ -123,6 +174,9 @@ Return ONLY valid JSON:
         }
       });
     }
+    // Attach source metadata
+    data.sourceQuote = sourceQuote || '';
+    data.pageNumber = pageNumber || null;
     return data;
   } catch (e) {
     throw new Error(`Single reel generation failed: ${e.message}`);
@@ -130,16 +184,19 @@ Return ONLY valid JSON:
 }
 
 // Step 3: Generate an animated video reel for one concept
-async function generateVideoReel(concept, pdfText, subject = 'General', style = 'realistic', explanationStyle = '') {
+async function generateVideoReel(concept, pdfText, subject = 'General', style = 'realistic', explanationStyle = '', sourceQuote = '', pageNumber = null) {
   const styleDesc = getStyleDesc(style);
   const styleInstruction = explanationStyle
     ? `\nIMPORTANT EXPLANATION STYLE: The user wants content explained in this specific way: "${explanationStyle}". Adapt your language, analogies, and examples to match this style throughout all slides and narration.\n`
+    : '';
+  const sourceContext = sourceQuote
+    ? `\nSource Quote (base your reel on this): "${sourceQuote}"\n`
     : '';
   const prompt = `You are creating an animated educational video reel (like Instagram Stories) about this concept.
 
 Concept: ${concept}
 Subject: ${subject}
-
+${sourceContext}
 Reference material:
 ${pdfText.substring(0, 6000)}
 
@@ -152,7 +209,7 @@ Rules:
 - Transitions: use "fade", "slide", or "scale"
 - Total duration should be 15-25 seconds
 - Include a quiz at the end with an explanation
-- For EACH scene, generate an "imagePrompt": a detailed visual description (30-60 words) for an AI image generator. Style: ${styleDesc}. Do NOT include text, letters, numbers or words - describe only visual scenes, objects, lighting, and atmosphere.
+- For EACH scene, generate an "imagePrompt": a detailed visual description (40-80 words) for an AI image generator. Style: ${styleDesc}. Describe a specific scene with concrete subjects, lighting, and atmosphere. Avoid generic stock-photo descriptions. Each image must be unique and vivid - translate abstract concepts into concrete visual metaphors. NEVER include text, words, letters, numbers, or labels in the image description - describe only visual scenes, objects, lighting, and atmosphere.
 ${styleInstruction}
 Return ONLY valid JSON:
 {
@@ -174,6 +231,8 @@ Return ONLY valid JSON:
     "answer": 0,
     "explanation": "Brief explanation of why the correct answer is right"
   },
+  "sourceQuote": "${sourceQuote ? 'included' : ''}",
+  "pageNumber": ${pageNumber || 'null'},
   "tags": ["tag1", "tag2"]
 }`;
 
@@ -191,12 +250,16 @@ Return ONLY valid JSON:
         }
       });
     }
+    // Attach source metadata
+    data.sourceQuote = sourceQuote || '';
+    data.pageNumber = pageNumber || null;
     return data;
   } catch (e) {
     throw new Error(`Video reel generation failed: ${e.message}`);
   }
 }
 
+// DEPRECATED: Use page-by-page extraction + generateSingleReel/generateVideoReel instead
 // Bulk generation (kept for backward compat)
 async function generateReelsFromText(pdfText, subject = 'General', style = 'realistic', explanationStyle = '') {
   const styleDesc = getStyleDesc(style);
@@ -256,6 +319,7 @@ Return ONLY valid JSON in this exact format:
 module.exports = {
   generateReelsFromText,
   extractConcepts,
+  extractConceptsFromPage,
   generateSingleReel,
   generateVideoReel,
   STYLE_PRESETS,

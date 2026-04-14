@@ -1,24 +1,35 @@
-const String _imageProxyBase = 'https://edureels.onrender.com/api/image';
+// Direct Pollinations AI - no proxy needed, much faster
+String _buildImageUrl(String prompt, {int width = 512, int height = 768}) {
+  // Cap prompt to avoid URL length issues (Pollinations has limits)
+  String trimmed = prompt.length > 200 ? prompt.substring(0, 200) : prompt;
+  final enhanced = '$trimmed, highly detailed, professional quality';
+  final encoded = Uri.encodeComponent(enhanced);
+  final seed = prompt.hashCode.abs();
+  return 'https://image.pollinations.ai/prompt/$encoded?width=$width&height=$height&model=flux&nologo=true&seed=$seed';
+}
 
 class ReelSlide {
   final String heading;
   final String content;
   final String emoji;
   final String imagePrompt;
+  final String sourceQuote;
+  final int pageNumber;
 
   ReelSlide({
     required this.heading,
     required this.content,
     required this.emoji,
     this.imagePrompt = '',
+    this.sourceQuote = '',
+    this.pageNumber = 0,
   });
 
   String get imageUrl {
     final prompt = imagePrompt.isNotEmpty
         ? imagePrompt
-        : 'beautiful educational illustration ${heading.length > 40 ? heading.substring(0, 40) : heading} photorealistic';
-    final encoded = Uri.encodeComponent(prompt);
-    return '$_imageProxyBase?prompt=$encoded&width=720&height=1280&seed=${prompt.hashCode.abs()}';
+        : 'educational illustration about ${heading.length > 60 ? heading.substring(0, 60) : heading}, digital art, vibrant colors, detailed';
+    return _buildImageUrl(prompt);
   }
 
   factory ReelSlide.fromJson(Map<String, dynamic> json) {
@@ -27,6 +38,8 @@ class ReelSlide {
       content: json['content'] ?? '',
       emoji: json['emoji'] ?? '',
       imagePrompt: json['imagePrompt'] ?? '',
+      sourceQuote: json['sourceQuote'] ?? '',
+      pageNumber: json['pageNumber'] ?? 0,
     );
   }
 }
@@ -61,6 +74,8 @@ class ReelScene {
   final String transition;
   final List<String> backgroundGradient;
   final String imagePrompt;
+  final String sourceQuote;
+  final int pageNumber;
 
   ReelScene({
     required this.text,
@@ -69,15 +84,16 @@ class ReelScene {
     required this.transition,
     required this.backgroundGradient,
     this.imagePrompt = '',
+    this.sourceQuote = '',
+    this.pageNumber = 0,
   });
 
   String get imageUrl {
-    final shortText = text.length > 40 ? text.substring(0, 40) : text;
+    final shortText = text.length > 60 ? text.substring(0, 60) : text;
     final prompt = imagePrompt.isNotEmpty
         ? imagePrompt
-        : 'beautiful educational scene $shortText photorealistic';
-    final encoded = Uri.encodeComponent(prompt);
-    return '$_imageProxyBase?prompt=$encoded&width=720&height=1280&seed=${prompt.hashCode.abs()}';
+        : 'educational scene about $shortText, digital art, vibrant colors, detailed';
+    return _buildImageUrl(prompt);
   }
 
   factory ReelScene.fromJson(Map<String, dynamic> json) {
@@ -88,6 +104,8 @@ class ReelScene {
       transition: json['transition'] ?? 'fade',
       backgroundGradient: List<String>.from(json['backgroundGradient'] ?? ['#667eea', '#764ba2']),
       imagePrompt: json['imagePrompt'] ?? '',
+      sourceQuote: json['sourceQuote'] ?? '',
+      pageNumber: json['pageNumber'] ?? 0,
     );
   }
 }
@@ -110,6 +128,8 @@ class Reel {
   final String pdfName;
   final String groupId;
   final String explanationStyle;
+  final String sourceQuote;
+  final int pageNumber;
 
   Reel({
     required this.id,
@@ -129,6 +149,8 @@ class Reel {
     required this.pdfName,
     this.groupId = '',
     this.explanationStyle = '',
+    this.sourceQuote = '',
+    this.pageNumber = 0,
   });
 
   factory Reel.fromJson(Map<String, dynamic> json) {
@@ -156,6 +178,8 @@ class Reel {
       pdfName: json['pdfName'] ?? '',
       groupId: json['groupId'] ?? '',
       explanationStyle: json['explanationStyle'] ?? '',
+      sourceQuote: json['sourceQuote'] ?? '',
+      pageNumber: json['pageNumber'] ?? 0,
     );
   }
 }

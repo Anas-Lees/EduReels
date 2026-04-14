@@ -176,7 +176,8 @@ class ApiService {
     String url = '$baseUrl/reels?limit=$limit';
     if (lastId != null) url += '&lastId=$lastId';
 
-    final response = await http.get(Uri.parse(url), headers: headers);
+    final response = await http.get(Uri.parse(url), headers: headers)
+        .timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -185,10 +186,13 @@ class ApiService {
     throw Exception('Failed to load reels');
   }
 
-  static Future<List<Reel>> getMyReels() async {
+  static Future<List<Reel>> getMyReels({String? lastId, int limit = 50}) async {
     final headers = await _headers();
+    String url = '$baseUrl/reels/my?limit=$limit';
+    if (lastId != null) url += '&lastId=$lastId';
     final response =
-        await http.get(Uri.parse('$baseUrl/reels/my'), headers: headers);
+        await http.get(Uri.parse(url), headers: headers)
+            .timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -202,7 +206,7 @@ class ApiService {
     final response = await http.post(
       Uri.parse('$baseUrl/reels/$reelId/like'),
       headers: headers,
-    );
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['liked'];
@@ -215,7 +219,7 @@ class ApiService {
     final response = await http.post(
       Uri.parse('$baseUrl/reels/$reelId/save'),
       headers: headers,
-    );
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['saved'];
@@ -228,13 +232,14 @@ class ApiService {
     await http.post(
       Uri.parse('$baseUrl/reels/$reelId/view'),
       headers: headers,
-    );
+    ).timeout(const Duration(seconds: 15));
   }
 
   // Groups API
   static Future<List<Group>> getGroups() async {
     final headers = await _headers();
-    final response = await http.get(Uri.parse('$baseUrl/groups'), headers: headers);
+    final response = await http.get(Uri.parse('$baseUrl/groups'), headers: headers)
+        .timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return (data['groups'] as List).map((g) => Group.fromJson(g)).toList();
@@ -248,7 +253,7 @@ class ApiService {
       Uri.parse('$baseUrl/groups'),
       headers: headers,
       body: jsonEncode({'name': name, 'description': description}),
-    );
+    ).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       return Group.fromJson(jsonDecode(response.body));
     }
@@ -260,7 +265,7 @@ class ApiService {
     final response = await http.delete(
       Uri.parse('$baseUrl/groups/$groupId'),
       headers: headers,
-    );
+    ).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       throw Exception('Failed to delete group');
     }
@@ -271,7 +276,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$baseUrl/groups/$groupId/reels'),
       headers: headers,
-    );
+    ).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return (data['reels'] as List).map((r) => Reel.fromJson(r)).toList();

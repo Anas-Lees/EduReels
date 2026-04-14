@@ -7,11 +7,15 @@ class ReelProvider extends ChangeNotifier {
   List<Reel> _reels = [];
   List<Reel> _myReels = [];
   bool _loading = false;
+  bool _loadingMyReels = false;
   bool _uploading = false;
   bool _isGenerating = false;
   int _generatingTotal = 0;
   int _generatingDone = 0;
+  int _currentPage = 0;
+  int _totalPages = 0;
   String? _error;
+  String? _myReelsError;
   String? _uploadStatus;
   final Set<String> _likedReels = {};
   final Set<String> _savedReels = {};
@@ -19,11 +23,15 @@ class ReelProvider extends ChangeNotifier {
   List<Reel> get reels => _reels;
   List<Reel> get myReels => _myReels;
   bool get loading => _loading;
+  bool get loadingMyReels => _loadingMyReels;
   bool get uploading => _uploading;
   bool get isGenerating => _isGenerating;
   int get generatingTotal => _generatingTotal;
   int get generatingDone => _generatingDone;
+  int get currentPage => _currentPage;
+  int get totalPages => _totalPages;
   String? get error => _error;
+  String? get myReelsError => _myReelsError;
   String? get uploadStatus => _uploadStatus;
 
   bool isLiked(String reelId) => _likedReels.contains(reelId);
@@ -46,11 +54,18 @@ class ReelProvider extends ChangeNotifier {
   }
 
   Future<void> loadMyReels() async {
+    _loadingMyReels = true;
+    _myReelsError = null;
+    notifyListeners();
+
     try {
       _myReels = await ApiService.getMyReels();
+      _loadingMyReels = false;
       notifyListeners();
     } catch (e) {
-      // Silently fail
+      _myReelsError = 'Failed to load your reels';
+      _loadingMyReels = false;
+      notifyListeners();
     }
   }
 
@@ -61,6 +76,8 @@ class ReelProvider extends ChangeNotifier {
     _isGenerating = false;
     _generatingTotal = 0;
     _generatingDone = 0;
+    _currentPage = 0;
+    _totalPages = 0;
     _uploadStatus = 'Uploading PDF...';
     _error = null;
     notifyListeners();
@@ -98,6 +115,19 @@ class ReelProvider extends ChangeNotifier {
             _isGenerating = false;
             _uploadStatus =
                 '${event.data['reelCount']} reels created!';
+            notifyListeners();
+            break;
+
+          case 'page_start':
+            _currentPage = event.data['page'] ?? 0;
+            _totalPages = event.data['totalPages'] ?? 0;
+            _uploadStatus = 'Processing page $_currentPage of $_totalPages...';
+            notifyListeners();
+            break;
+
+          case 'page_done':
+            _currentPage = event.data['page'] ?? _currentPage;
+            _uploadStatus = 'Page $_currentPage processed';
             notifyListeners();
             break;
 
