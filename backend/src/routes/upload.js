@@ -115,6 +115,7 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
     if (aborted) { fs.unlinkSync(filePath); clearInterval(keepaliveInterval); return res.end(); }
 
     // Process each page
+    let consecutive429 = 0;
     for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
       if (aborted) break;
 
@@ -130,8 +131,20 @@ router.post('/stream', verifyToken, upload.single('pdf'), async (req, res) => {
           allConceptTitles,
           explanationStyle
         );
+        consecutive429 = 0; // Reset on success
       } catch (err) {
         console.error(`Error extracting concepts from page ${page.pageNum}:`, err.message);
+        const is429 = err.message && (err.message.includes('429') || err.message.includes('rate_limit'));
+        if (is429) {
+          consecutive429++;
+          if (consecutive429 >= 3) {
+            sendSSE(res, 'error', { message: 'rate_limit_exceeded: AI rate limit reached. Processing stopped to avoid further errors. Please wait a few minutes and try again with a smaller PDF.' });
+            break;
+          }
+          // Wait longer before trying the next page
+          console.log(`Rate limited on page ${page.pageNum}, waiting 10s before next page...`);
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        }
         sendSSE(res, 'error', { message: `Page ${page.pageNum}: ${err.message}`, pageNumber: page.pageNum });
         continue;
       }

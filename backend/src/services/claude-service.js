@@ -1,7 +1,8 @@
-const Groq = require('groq-sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const MODEL = 'llama-3.3-70b-versatile';
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const MODEL_EXTRACT = 'gemini-2.5-flash-lite'; // Higher rate limits (15 RPM, 1000 RPD)
+const MODEL_GENERATE = 'gemini-2.5-flash'; // Better quality (10 RPM, 250 RPD)
 
 const STYLE_PRESETS = {
   realistic: 'photorealistic, high detail, natural lighting, cinematic',
@@ -13,15 +14,30 @@ const STYLE_PRESETS = {
   scifi: 'sci-fi digital art, neon glow, futuristic, cyberpunk aesthetic',
 };
 
-async function chatComplete(prompt) {
-  const response = await groq.chat.completions.create({
-    model: MODEL,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.7,
-    max_tokens: 4096,
-    response_format: { type: 'json_object' },
-  });
-  return response.choices[0].message.content;
+async function chatCompleteWithRetry(prompt, model = MODEL_GENERATE, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const geminiModel = genAI.getGenerativeModel({
+        model,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.7,
+          maxOutputTokens: 4096,
+        },
+      });
+      const result = await geminiModel.generateContent(prompt);
+      return result.response.text();
+    } catch (e) {
+      const status = e?.status || e?.httpStatusCode;
+      if ((status === 429 || status === 503) && attempt < maxRetries - 1) {
+        const waitMs = Math.min(2000 * Math.pow(2, attempt), 30000);
+        console.log(`Rate limited, waiting ${waitMs/1000}s before retry ${attempt + 1}/${maxRetries}...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+      throw e;
+    }
+  }
 }
 
 function parseJsonResponse(text) {
@@ -53,7 +69,7 @@ Subject: ${subject}
 Page Number: ${pageNum}
 
 Page Text:
-${pageText}
+${pageText.substring(0, 3000)}
 ${styleInstruction}${dedupInstruction}
 For each concept, include an exact verbatim quote (2-4 sentences) from the page text that the concept is based on.
 
@@ -71,7 +87,7 @@ Return ONLY valid JSON:
 If this page has no meaningful educational concepts, return: { "concepts": [] }`;
 
   try {
-    const text = await chatComplete(prompt);
+    const text = await chatCompleteWithRetry(prompt, MODEL_EXTRACT);
     const data = parseJsonResponse(text);
     if (!data.concepts || !Array.isArray(data.concepts)) {
       throw new Error('AI response missing concepts array');
@@ -106,7 +122,7 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const text = await chatComplete(prompt);
+    const text = await chatCompleteWithRetry(prompt, MODEL_EXTRACT);
     const data = parseJsonResponse(text);
     if (!data.concepts || !Array.isArray(data.concepts)) {
       throw new Error('AI response missing concepts array');
@@ -132,7 +148,7 @@ Concept: ${concept}
 Subject: ${subject}
 ${sourceContext}
 Reference material (use relevant parts):
-${pdfText.substring(0, 6000)}
+${pdfText.substring(0, 3000)}
 
 Create ONE educational reel with 3-5 slides. Rules:
 - Keep each slide short (max 2 sentences)
@@ -161,7 +177,7 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const text = await chatComplete(prompt);
+    const text = await chatCompleteWithRetry(prompt);
     const data = parseJsonResponse(text);
     if (!data.title || !data.slides) {
       throw new Error('AI response missing title or slides');
@@ -198,7 +214,7 @@ Concept: ${concept}
 Subject: ${subject}
 ${sourceContext}
 Reference material:
-${pdfText.substring(0, 6000)}
+${pdfText.substring(0, 3000)}
 
 Create a video reel with 4-6 scenes. Each scene appears for a few seconds with animated text and emoji.
 
@@ -237,7 +253,7 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const text = await chatComplete(prompt);
+    const text = await chatCompleteWithRetry(prompt);
     const data = parseJsonResponse(text);
     if (!data.title || !data.scenes) {
       throw new Error('AI response missing title or scenes');
@@ -309,7 +325,7 @@ Return ONLY valid JSON in this exact format:
 }`;
 
   try {
-    const text = await chatComplete(prompt);
+    const text = await chatCompleteWithRetry(prompt);
     return parseJsonResponse(text);
   } catch (e) {
     throw new Error(`Bulk reel generation failed: ${e.message}`);

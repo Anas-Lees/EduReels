@@ -9,8 +9,8 @@
     },
     {
       "name": "flutter-web",
-      "runtimeExecutable": "flutter",
-      "runtimeArgs": ["run", "-d", "chrome", "--web-port", "8080"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["app/serve-web.js"],
       "port": 8080
     }
   ]
