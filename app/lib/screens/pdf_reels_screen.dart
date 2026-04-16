@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/reel.dart';
 import '../providers/reel_provider.dart';
+import '../services/tts_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/reel_card.dart';
 import '../widgets/video_reel_card.dart';
@@ -26,6 +27,7 @@ class PdfReelsScreen extends StatefulWidget {
 class _PdfReelsScreenState extends State<PdfReelsScreen> {
   late final PageController _pageController;
   late final List<Reel> _sortedReels;
+  int _activeIndex = 0;
 
   @override
   void initState() {
@@ -44,12 +46,14 @@ class _PdfReelsScreenState extends State<PdfReelsScreen> {
     int startIndex = _sortedReels.indexWhere((r) => !provider.isSaved(r.id));
     if (startIndex == -1) startIndex = 0; // all solved → start from beginning
 
+    _activeIndex = startIndex;
     _pageController = PageController(initialPage: startIndex);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_sortedReels.isNotEmpty) {
         provider.trackView(_sortedReels[startIndex].id);
         _preloadImages(startIndex);
+        TtsService.instance.setActiveOwner(_sortedReels[startIndex].id);
       }
     });
   }
@@ -79,6 +83,7 @@ class _PdfReelsScreenState extends State<PdfReelsScreen> {
 
   @override
   void dispose() {
+    TtsService.instance.stop();
     _pageController.dispose();
     super.dispose();
   }
@@ -130,16 +135,22 @@ class _PdfReelsScreenState extends State<PdfReelsScreen> {
                   physics: const BouncingScrollPhysics(),
                   itemCount: _sortedReels.length,
                   onPageChanged: (index) {
+                    setState(() => _activeIndex = index);
                     reelProvider.trackView(_sortedReels[index].id);
                     _preloadImages(index);
+                    TtsService.instance
+                        .setActiveOwner(_sortedReels[index].id);
                   },
                   itemBuilder: (context, index) {
                     final reel = _sortedReels[index];
+                    final isActive = index == _activeIndex;
 
                     if (reel.type == 'video' && reel.scenes.isNotEmpty) {
                       return VideoReelCard(
+                        key: ValueKey('v_${reel.id}'),
                         reel: reel,
                         isSaved: reelProvider.isSaved(reel.id),
+                        isActive: isActive,
                         onSave: () => reelProvider.toggleSave(reel.id),
                         onShare: () => Share.share(
                             'Check out this reel: ${reel.title} on EduReels!'),
@@ -147,8 +158,10 @@ class _PdfReelsScreenState extends State<PdfReelsScreen> {
                     }
 
                     return ReelCard(
+                      key: ValueKey('r_${reel.id}'),
                       reel: reel,
                       isSaved: reelProvider.isSaved(reel.id),
+                      isActive: isActive,
                       onSave: () => reelProvider.toggleSave(reel.id),
                       onShare: () => Share.share(
                           'Check out this reel: ${reel.title} on EduReels!'),

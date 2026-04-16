@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/reel.dart';
 import '../providers/reel_provider.dart';
+import '../services/tts_service.dart';
 import '../widgets/reel_card.dart';
 import '../widgets/video_reel_card.dart';
 
@@ -17,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final PageController _pageController = PageController();
+  int _activeIndex = 0;
 
   @override
   void initState() {
@@ -26,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await provider.loadReels();
       if (mounted && provider.reels.isNotEmpty) {
         _preloadImages(provider.reels, 0);
+        TtsService.instance.setActiveOwner(provider.reels[0].id);
       }
     });
   }
@@ -51,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    TtsService.instance.stop();
     _pageController.dispose();
     super.dispose();
   }
@@ -129,24 +133,32 @@ class _HomeScreenState extends State<HomeScreen> {
             physics: const BouncingScrollPhysics(),
             itemCount: reelProvider.reels.length,
             onPageChanged: (index) {
+              setState(() => _activeIndex = index);
               reelProvider.trackView(reelProvider.reels[index].id);
               _preloadImages(reelProvider.reels, index);
+              TtsService.instance
+                  .setActiveOwner(reelProvider.reels[index].id);
             },
             itemBuilder: (context, index) {
               final reel = reelProvider.reels[index];
+              final isActive = index == _activeIndex;
 
               if (reel.type == 'video' && reel.scenes.isNotEmpty) {
                 return VideoReelCard(
+                  key: ValueKey('v_${reel.id}'),
                   reel: reel,
                   isSaved: reelProvider.isSaved(reel.id),
+                  isActive: isActive,
                   onSave: () => reelProvider.toggleSave(reel.id),
                   onShare: () => Share.share('Check out this reel: ${reel.title} on EduReels!'),
                 );
               }
 
               return ReelCard(
+                key: ValueKey('r_${reel.id}'),
                 reel: reel,
                 isSaved: reelProvider.isSaved(reel.id),
+                isActive: isActive,
                 onSave: () => reelProvider.toggleSave(reel.id),
                 onShare: () => Share.share('Check out this reel: ${reel.title} on EduReels!'),
               );

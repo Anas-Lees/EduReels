@@ -12,6 +12,7 @@ import 'source_viewer_sheet.dart';
 class VideoReelCard extends StatefulWidget {
   final Reel reel;
   final bool isSaved;
+  final bool isActive;
   final VoidCallback onSave;
   final VoidCallback onShare;
 
@@ -21,6 +22,7 @@ class VideoReelCard extends StatefulWidget {
     required this.isSaved,
     required this.onSave,
     required this.onShare,
+    this.isActive = true,
   });
 
   @override
@@ -61,21 +63,56 @@ class _VideoReelCardState extends State<VideoReelCard>
         }
       }
     });
-    _controller.forward();
+    if (widget.isActive) _controller.forward();
 
     _particleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
-    )..repeat();
+    );
+    if (widget.isActive) _particleController.repeat();
 
     _particles = List.generate(12, (_) => _Particle.random(_random));
 
-    // Speak narration
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.reel.narration.isNotEmpty) {
-        TtsService.instance.speak(widget.reel.narration, owner: widget.reel.id);
-      }
+    // Only narrate if we're the visible card.
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _speakNarration());
+    }
+  }
+
+  void _speakNarration() {
+    if (!widget.isActive) return;
+    if (widget.reel.narration.isNotEmpty) {
+      TtsService.instance.speak(widget.reel.narration, owner: widget.reel.id);
+    }
+  }
+
+  void _replay() {
+    HapticFeedback.lightImpact();
+    _controller.reset();
+    _controller.forward();
+    setState(() {
+      _isPaused = false;
+      _showQuiz = false;
+      _quizAnswered = false;
+      _selectedQuizAnswer = null;
     });
+    _speakNarration();
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoReelCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        _controller.forward();
+        _particleController.repeat();
+        _speakNarration();
+      } else {
+        _controller.stop();
+        _particleController.stop();
+        TtsService.instance.stopIfOwner(widget.reel.id);
+      }
+    }
   }
 
   @override
@@ -127,8 +164,8 @@ class _VideoReelCardState extends State<VideoReelCard>
   void _toggleTts() {
     HapticFeedback.lightImpact();
     TtsService.instance.toggleMute();
-    if (!TtsService.instance.muted && widget.reel.narration.isNotEmpty) {
-      TtsService.instance.speak(widget.reel.narration, owner: widget.reel.id);
+    if (!TtsService.instance.muted && widget.isActive) {
+      _speakNarration();
     }
     setState(() {});
   }
@@ -258,6 +295,12 @@ class _VideoReelCardState extends State<VideoReelCard>
                               : widget.reel.subject,
                         ),
                         const Spacer(),
+                        _glassIconButton(
+                          icon: Icons.replay_rounded,
+                          onTap: _replay,
+                          tint: Colors.white,
+                        ),
+                        const SizedBox(width: 6),
                         ValueListenableBuilder<bool>(
                           valueListenable: TtsService.instance.isMuted,
                           builder: (context, muted, _) => _glassIconButton(

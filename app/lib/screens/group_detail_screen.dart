@@ -205,9 +205,19 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final pdfGroups = _groupByPdf();
     final reelProvider = context.watch<ReelProvider>();
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-      itemCount: pdfGroups.length,
+    return RefreshIndicator(
+      color: AppTheme.primary,
+      backgroundColor: AppTheme.surfaceHigh,
+      onRefresh: () async {
+        HapticFeedback.lightImpact();
+        await _loadReels();
+      },
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+        itemCount: pdfGroups.length,
       itemBuilder: (context, index) {
         final entry = pdfGroups[index];
         final pdfName = entry.key;
@@ -363,6 +373,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           ),
         );
       },
+    ),
     );
   }
 }

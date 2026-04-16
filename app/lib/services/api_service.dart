@@ -16,6 +16,43 @@ class SseEvent {
 class ApiService {
   static const String baseUrl = 'https://edureels.onrender.com/api';
 
+  /// Tracks whether we've confirmed the backend is awake during this session.
+  /// Render's free tier cold-starts in 20-60s, so we ping it in the background
+  /// on app start and before uploads so the user isn't stuck waiting.
+  static bool _backendWarm = false;
+  static Future<void>? _warmupInFlight;
+
+  static bool get isBackendWarm => _backendWarm;
+
+  /// Non-authenticated health ping. Returns when the backend responds (or
+  /// times out after [timeout]). Safe to call repeatedly — results are
+  /// cached for the session once a success comes back.
+  static Future<bool> warmUp({
+    Duration timeout = const Duration(seconds: 75),
+  }) async {
+    if (_backendWarm) return true;
+    if (_warmupInFlight != null) {
+      await _warmupInFlight;
+      return _backendWarm;
+    }
+    final completer = Completer<void>();
+    _warmupInFlight = completer.future;
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/health'))
+          .timeout(timeout);
+      if (res.statusCode >= 200 && res.statusCode < 500) {
+        _backendWarm = true;
+      }
+    } catch (_) {
+      // Swallow — caller can retry.
+    } finally {
+      completer.complete();
+      _warmupInFlight = null;
+    }
+    return _backendWarm;
+  }
+
   static Future<String?> _getToken() async {
     final user = FirebaseAuth.instance.currentUser;
     return await user?.getIdToken();

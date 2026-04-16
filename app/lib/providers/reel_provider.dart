@@ -111,8 +111,18 @@ class ReelProvider extends ChangeNotifier {
     _generatingDone = 0;
     _currentPage = 0;
     _totalPages = 0;
-    _uploadStatus = 'Uploading PDF...';
     _error = null;
+
+    // Wake up Render's free-tier backend before we send the big multipart
+    // upload. If it's cold, this can take 20-60s — show a message so the
+    // user doesn't think the app is frozen.
+    if (!ApiService.isBackendWarm) {
+      _uploadStatus = 'Waking up server… first upload can take up to a minute';
+      notifyListeners();
+      await ApiService.warmUp();
+    }
+
+    _uploadStatus = 'Uploading PDF…';
     notifyListeners();
 
     try {
@@ -171,7 +181,18 @@ class ReelProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      _error = e.toString();
+      // Render cold-starts often look like network failures. Map them to
+      // a friendly message and let the user retry.
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('socketexception') ||
+          msg.contains('timeout') ||
+          msg.contains('failed host lookup') ||
+          msg.contains('connection')) {
+        _error =
+            'Could not reach the server. It may still be waking up — tap Generate again in a few seconds.';
+      } else {
+        _error = e.toString().replaceAll('Exception: ', '');
+      }
       _uploadStatus = null;
       _uploading = false;
       _isGenerating = false;

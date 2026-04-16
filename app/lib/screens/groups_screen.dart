@@ -144,44 +144,98 @@ class _GroupsScreenState extends State<GroupsScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _buildHeader(groupProvider.groups.length)),
-            if (groupProvider.loading && groupProvider.groups.isEmpty)
-              SliverToBoxAdapter(child: _buildSkeleton())
-            else if (groupProvider.groups.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _buildEmpty(),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
-                sliver: SliverList.builder(
-                  itemCount: groupProvider.groups.length,
-                  itemBuilder: (context, index) {
-                    final group = groupProvider.groups[index];
-                    return _GroupTile(
-                      name: group.name,
-                      description: group.description,
-                      reelCount: group.reelCount,
-                      dateLabel: _formatDate(group.createdAt),
-                      accentIndex: index,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => GroupDetailScreen(group: group),
+        child: RefreshIndicator(
+          color: AppTheme.primary,
+          backgroundColor: AppTheme.surfaceHigh,
+          onRefresh: () async {
+            HapticFeedback.lightImpact();
+            await groupProvider.loadGroups();
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: [
+              SliverToBoxAdapter(
+                  child: _buildHeader(groupProvider.groups.length)),
+              if (groupProvider.loading && groupProvider.groups.isEmpty)
+                SliverToBoxAdapter(child: _buildSkeleton())
+              else if (groupProvider.groups.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _buildEmpty(),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
+                  sliver: SliverList.builder(
+                    itemCount: groupProvider.groups.length,
+                    itemBuilder: (context, index) {
+                      final group = groupProvider.groups[index];
+                      return Dismissible(
+                        key: ValueKey('group_${group.id}'),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          alignment: Alignment.centerRight,
+                          decoration: BoxDecoration(
+                            color: AppTheme.danger.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppTheme.danger.withValues(alpha: 0.4),
+                            ),
                           ),
-                        );
-                      },
-                      onDelete: () => _confirmDelete(group.id, group.name),
-                    );
-                  },
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Icon(Icons.delete_rounded,
+                                  color: AppTheme.danger),
+                              SizedBox(width: 8),
+                              Text(
+                                'Delete',
+                                style: TextStyle(
+                                  color: AppTheme.danger,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        confirmDismiss: (_) async {
+                          HapticFeedback.mediumImpact();
+                          return await _askDeleteConfirm(group.name);
+                        },
+                        onDismissed: (_) {
+                          context
+                              .read<GroupProvider>()
+                              .deleteGroup(group.id);
+                        },
+                        child: _GroupTile(
+                          name: group.name,
+                          description: group.description,
+                          reelCount: group.reelCount,
+                          dateLabel: _formatDate(group.createdAt),
+                          accentIndex: index,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    GroupDetailScreen(group: group),
+                              ),
+                            );
+                          },
+                          onDelete: () =>
+                              _confirmDelete(group.id, group.name),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -304,6 +358,37 @@ class _GroupsScreenState extends State<GroupsScreen> {
         ),
       ),
     );
+  }
+
+  Future<bool> _askDeleteConfirm(String name) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceHigh,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text('Delete group?'),
+        content: Text(
+          'Remove "$name"? Its reels will stay in your library.',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.danger,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   void _confirmDelete(String id, String name) {

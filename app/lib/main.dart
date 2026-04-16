@@ -10,6 +10,7 @@ import 'screens/login_screen.dart';
 import 'screens/upload_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/groups_screen.dart';
+import 'services/api_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -25,6 +26,10 @@ void main() async {
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
+  // Fire a non-blocking warm-up so the backend is awake by the time the
+  // user opens the Upload tab. Render's free tier naps after 15 min.
+  // ignore: discarded_futures
+  ApiService.warmUp();
   runApp(const EduReelsApp());
 }
 

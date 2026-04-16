@@ -13,6 +13,7 @@ import 'source_viewer_sheet.dart';
 class ReelCard extends StatefulWidget {
   final Reel reel;
   final bool isSaved;
+  final bool isActive;
   final VoidCallback onSave;
   final VoidCallback onShare;
 
@@ -22,6 +23,7 @@ class ReelCard extends StatefulWidget {
     required this.isSaved,
     required this.onSave,
     required this.onShare,
+    this.isActive = true,
   });
 
   @override
@@ -79,11 +81,33 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
 
     _particles = List.generate(10, (_) => _Particle.random(_random));
 
-    // Speak first slide
-    WidgetsBinding.instance.addPostFrameCallback((_) => _speakCurrent());
+    // Only speak if this card is actually the visible/active one.
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _speakCurrent());
+    } else {
+      // Pause auto-advance until this card is visible.
+      _slideTimerController.stop();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ReelCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        // became active — start speaking current slide and resume timer
+        _slideTimerController.forward();
+        _speakCurrent();
+      } else {
+        // left the viewport — stop timers and our speech
+        _slideTimerController.stop();
+        TtsService.instance.stopIfOwner(widget.reel.id);
+      }
+    }
   }
 
   void _speakCurrent() {
+    if (!widget.isActive) return;
     if (_currentSlide < widget.reel.slides.length) {
       final slide = widget.reel.slides[_currentSlide];
       TtsService.instance.speak(
@@ -91,6 +115,11 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
         owner: widget.reel.id,
       );
     }
+  }
+
+  void _replay() {
+    HapticFeedback.lightImpact();
+    _speakCurrent();
   }
 
   void _advanceSlide() {
@@ -126,7 +155,7 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
   void _toggleTts() {
     HapticFeedback.lightImpact();
     TtsService.instance.toggleMute();
-    if (!TtsService.instance.muted) {
+    if (!TtsService.instance.muted && widget.isActive) {
       _speakCurrent();
     }
     setState(() {});
@@ -230,6 +259,12 @@ class _ReelCardState extends State<ReelCard> with TickerProviderStateMixin {
                         : widget.reel.subject,
                   ),
                   const Spacer(),
+                  _glassIconButton(
+                    icon: Icons.replay_rounded,
+                    onTap: _replay,
+                    tint: Colors.white,
+                  ),
+                  const SizedBox(width: 6),
                   ValueListenableBuilder<bool>(
                     valueListenable: TtsService.instance.isMuted,
                     builder: (context, muted, _) => _glassIconButton(
