@@ -1,11 +1,12 @@
-// Direct Pollinations AI - no proxy needed, much faster
+// Direct Pollinations AI - turbo model for fast image generation (~1-2s)
 String _buildImageUrl(String prompt, {int width = 512, int height = 768}) {
   // Cap prompt to avoid URL length issues (Pollinations has limits)
-  String trimmed = prompt.length > 200 ? prompt.substring(0, 200) : prompt;
-  final enhanced = '$trimmed, highly detailed, professional quality';
+  String trimmed = prompt.length > 180 ? prompt.substring(0, 180) : prompt;
+  final enhanced = '$trimmed, cinematic lighting, vibrant colors, detailed';
   final encoded = Uri.encodeComponent(enhanced);
-  final seed = prompt.hashCode.abs();
-  return 'https://image.pollinations.ai/prompt/$encoded?width=$width&height=$height&model=flux&nologo=true&seed=$seed';
+  final seed = prompt.hashCode.abs() % 1000000;
+  // turbo model is much faster than flux (~1-2s vs ~5s)
+  return 'https://image.pollinations.ai/prompt/$encoded?width=$width&height=$height&model=turbo&nologo=true&enhance=true&seed=$seed';
 }
 
 class ReelSlide {

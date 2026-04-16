@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class SourceViewerSheet extends StatelessWidget {
   final String sourceQuote;
@@ -38,8 +39,8 @@ class SourceViewerSheet extends StatelessWidget {
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFF1a1a2e),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            color: AppTheme.surfaceHigh,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Column(
             children: [
@@ -60,11 +61,8 @@ class SourceViewerSheet extends StatelessWidget {
               Container(
                 height: 3,
                 margin: const EdgeInsets.symmetric(horizontal: 24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(2),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                  ),
+                decoration: const BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
                 ),
               ),
 
@@ -78,12 +76,12 @@ class SourceViewerSheet extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF667eea).withValues(alpha: 0.15),
+                        gradient: AppTheme.primaryGradient,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
                         Icons.menu_book_rounded,
-                        color: Color(0xFF667eea),
+                        color: Colors.white,
                         size: 22,
                       ),
                     ),

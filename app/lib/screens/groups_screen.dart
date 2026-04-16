@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 import '../providers/group_provider.dart';
+import '../theme/app_theme.dart';
 import 'group_detail_screen.dart';
 
 class GroupsScreen extends StatefulWidget {
@@ -19,79 +22,104 @@ class _GroupsScreenState extends State<GroupsScreen> {
     });
   }
 
-  void _showCreateDialog() {
+  void _showCreateSheet() {
+    HapticFeedback.mediumImpact();
     final nameController = TextEditingController();
     final descController = TextEditingController();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141428),
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Create Group', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'e.g. Subject 355',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.05),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Description (optional)',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.05),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-            ),
-          ],
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
           ),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.trim().isEmpty) return;
-              await context.read<GroupProvider>().createGroup(
-                nameController.text.trim(),
-                descController.text.trim(),
-              );
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF667eea),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: AppTheme.surfaceHigh,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
-            child: const Text('Create', style: TextStyle(fontWeight: FontWeight.w600)),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42, height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.create_new_folder_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'New study group',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Group name',
+                    hintText: 'e.g. Algorithms 355',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descController,
+                  maxLines: 2,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Description (optional)',
+                    hintText: 'What is this group for?',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      if (nameController.text.trim().isEmpty) return;
+                      HapticFeedback.lightImpact();
+                      await context.read<GroupProvider>().createGroup(
+                            nameController.text.trim(),
+                            descController.text.trim(),
+                          );
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                    icon: const Icon(Icons.check_rounded, size: 20),
+                    label: const Text('Create group'),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -99,8 +127,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
     if (dateStr.isEmpty) return '';
     try {
       final date = DateTime.parse(dateStr);
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[date.month - 1]} ${date.day}';
     } catch (_) {
       return dateStr;
     }
@@ -111,175 +142,320 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final groupProvider = context.watch<GroupProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0a0a1a),
-      appBar: AppBar(
-        title: const Text('Your Library', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24, letterSpacing: -0.5)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showCreateDialog,
-        backgroundColor: const Color(0xFF667eea),
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: const Icon(Icons.add_rounded, color: Colors.white),
-      ),
-      body: groupProvider.loading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 36, height: 36,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      color: Color(0xFF667eea),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Loading groups...', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14)),
-                ],
-              ),
-            )
-          : groupProvider.groups.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(26),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF667eea).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFF667eea).withValues(alpha: 0.15),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: const Icon(Icons.folder_open_rounded, size: 52, color: Color(0xFF667eea)),
-                        ),
-                        const SizedBox(height: 28),
-                        const Text('No groups yet',
-                            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
-                        const SizedBox(height: 10),
-                        Text('Create a group to organize your lectures',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 15, height: 1.4)),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
+      backgroundColor: AppTheme.bg,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _buildHeader(groupProvider.groups.length)),
+            if (groupProvider.loading && groupProvider.groups.isEmpty)
+              SliverToBoxAdapter(child: _buildSkeleton())
+            else if (groupProvider.groups.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildEmpty(),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
+                sliver: SliverList.builder(
                   itemCount: groupProvider.groups.length,
                   itemBuilder: (context, index) {
                     final group = groupProvider.groups[index];
-                    return GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => GroupDetailScreen(group: group),
-                        ),
-                      ),
-                      onLongPress: () {
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFF141428),
-                            surfaceTintColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            title: const Text('Delete Group?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20)),
-                            content: Text('This will remove "${group.name}" but keep all its reels.',
-                                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), height: 1.4)),
-                            actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx),
-                                child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-                              ),
-                              ElevatedButton(
-                                onPressed: () {
-                                  context.read<GroupProvider>().deleteGroup(group.id);
-                                  Navigator.pop(ctx);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.redAccent,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                              ),
-                            ],
+                    return _GroupTile(
+                      name: group.name,
+                      description: group.description,
+                      reelCount: group.reelCount,
+                      dateLabel: _formatDate(group.createdAt),
+                      accentIndex: index,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => GroupDetailScreen(group: group),
                           ),
                         );
                       },
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(11),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    const Color(0xFF667eea).withValues(alpha: 0.2),
-                                    const Color(0xFF764ba2).withValues(alpha: 0.15),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.folder_rounded, color: Color(0xFF667eea), size: 24),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(group.name,
-                                      style: const TextStyle(
-                                          color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                                  if (group.description.isNotEmpty) ...[
-                                    const SizedBox(height: 3),
-                                    Text(group.description,
-                                        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis),
-                                  ],
-                                  const SizedBox(height: 5),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.play_circle_outline_rounded, size: 14, color: const Color(0xFF667eea).withValues(alpha: 0.7)),
-                                      const SizedBox(width: 4),
-                                      Text('${group.reelCount} reels',
-                                          style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
-                                      const SizedBox(width: 12),
-                                      Icon(Icons.access_time_rounded, size: 13, color: Colors.white.withValues(alpha: 0.25)),
-                                      const SizedBox(width: 4),
-                                      Text(_formatDate(group.createdAt),
-                                          style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 12)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.chevron_right_rounded, color: Colors.white.withValues(alpha: 0.15), size: 22),
-                          ],
-                        ),
-                      ),
+                      onDelete: () => _confirmDelete(group.id, group.name),
                     );
                   },
                 ),
+              ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showCreateSheet,
+        backgroundColor: AppTheme.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New group',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+
+  Widget _buildHeader(int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ShaderMask(
+                shaderCallback: (bounds) =>
+                    AppTheme.primaryGradient.createShader(bounds),
+                child: const Text(
+                  'Your library',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            count == 0
+                ? 'Create your first study group to get started'
+                : '$count ${count == 1 ? 'group' : 'groups'} · swipe through reels to learn',
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 36),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(30),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppTheme.primary.withValues(alpha: 0.25),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            child: const Icon(Icons.auto_stories_rounded,
+                size: 68, color: AppTheme.primary),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Ready to study smarter?',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Create a group, drop in a PDF, and we turn it into bite-sized video reels with narration + quizzes.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 28),
+          ElevatedButton.icon(
+            onPressed: _showCreateSheet,
+            icon: const Icon(Icons.add_rounded, size: 20),
+            label: const Text('Create my first group'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSkeleton() {
+    return Shimmer.fromColors(
+      baseColor: AppTheme.surfaceHigh,
+      highlightColor: AppTheme.surfaceGlass,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: Column(
+          children: List.generate(
+            3,
+            (_) => Container(
+              height: 78,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(String id, String name) {
+    HapticFeedback.heavyImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceHigh,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text('Delete group?'),
+        content: Text(
+          'This will remove "$name" but keep all its reels.',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<GroupProvider>().deleteGroup(id);
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.danger,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupTile extends StatelessWidget {
+  final String name;
+  final String description;
+  final int reelCount;
+  final String dateLabel;
+  final int accentIndex;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _GroupTile({
+    required this.name,
+    required this.description,
+    required this.reelCount,
+    required this.dateLabel,
+    required this.accentIndex,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final gradient = AppTheme
+        .reelGradients[accentIndex % AppTheme.reelGradients.length];
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onDelete,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceHigh,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52, height: 52,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: gradient,
+                ),
+                boxShadow: AppTheme.glowShadow(gradient[0]),
+              ),
+              child: const Icon(Icons.folder_rounded,
+                  color: Colors.white, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.play_circle_outline_rounded,
+                          size: 14, color: AppTheme.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$reelCount reels',
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (dateLabel.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        Icon(Icons.access_time_rounded,
+                            size: 13, color: AppTheme.textMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          dateLabel,
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppTheme.textMuted, size: 24),
+          ],
+        ),
+      ),
     );
   }
 }

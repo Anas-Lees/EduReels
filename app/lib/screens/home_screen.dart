@@ -138,9 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (reel.type == 'video' && reel.scenes.isNotEmpty) {
                 return VideoReelCard(
                   reel: reel,
-                  isLiked: reelProvider.isLiked(reel.id),
                   isSaved: reelProvider.isSaved(reel.id),
-                  onLike: () => reelProvider.toggleLike(reel.id),
                   onSave: () => reelProvider.toggleSave(reel.id),
                   onShare: () => Share.share('Check out this reel: ${reel.title} on EduReels!'),
                 );
@@ -148,9 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               return ReelCard(
                 reel: reel,
-                isLiked: reelProvider.isLiked(reel.id),
                 isSaved: reelProvider.isSaved(reel.id),
-                onLike: () => reelProvider.toggleLike(reel.id),
                 onSave: () => reelProvider.toggleSave(reel.id),
                 onShare: () => Share.share('Check out this reel: ${reel.title} on EduReels!'),
               );

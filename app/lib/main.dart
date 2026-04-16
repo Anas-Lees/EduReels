@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
@@ -10,11 +10,20 @@ import 'screens/login_screen.dart';
 import 'screens/upload_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/groups_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: AppTheme.bg,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
   );
   runApp(const EduReelsApp());
 }
@@ -33,14 +42,7 @@ class EduReelsApp extends StatelessWidget {
       child: MaterialApp(
         title: 'EduReels',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF667eea),
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-          scaffoldBackgroundColor: const Color(0xFF1a1a2e),
-        ),
+        theme: AppTheme.dark,
         home: const AuthGate(),
       ),
     );
@@ -53,7 +55,6 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-
     if (auth.isLoggedIn) {
       return const MainNavigation();
     }
@@ -80,37 +81,153 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: _screens[_currentIndex],
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF16213e),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 10,
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.04),
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _NavItem(
+                icon: Icons.library_books_rounded,
+                label: 'Library',
+                isActive: _currentIndex == 0,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _currentIndex = 0);
+                },
+              ),
+              _NavItem(
+                icon: Icons.add_rounded,
+                label: 'Create',
+                isActive: _currentIndex == 1,
+                isPrimary: true,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _currentIndex = 1);
+                },
+              ),
+              _NavItem(
+                icon: Icons.person_rounded,
+                label: 'Profile',
+                isActive: _currentIndex == 2,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _currentIndex = 2);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final bool isPrimary;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+    this.isPrimary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isPrimary) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                shape: BoxShape.circle,
+                boxShadow: isActive
+                    ? AppTheme.glowShadow(AppTheme.primary)
+                    : AppTheme.softShadow,
+              ),
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isActive
+                    ? AppTheme.primary
+                    : AppTheme.textMuted,
+              ),
             ),
           ],
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFF667eea),
-          unselectedItemColor: Colors.white38,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.library_books_rounded),
-              label: 'Groups',
+      );
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? AppTheme.primary.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? AppTheme.primary : AppTheme.textMuted,
+              size: 24,
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.add_circle_outline, size: 32),
-              label: 'Upload',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_rounded),
-              label: 'Profile',
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color:
+                    isActive ? AppTheme.primary : AppTheme.textMuted,
+              ),
             ),
           ],
         ),

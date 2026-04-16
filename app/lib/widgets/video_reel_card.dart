@@ -1,23 +1,24 @@
 import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import '../models/reel.dart';
+import '../services/tts_service.dart';
+import '../theme/app_theme.dart';
 import 'source_viewer_sheet.dart';
 
 class VideoReelCard extends StatefulWidget {
   final Reel reel;
-  final bool isLiked;
   final bool isSaved;
-  final VoidCallback onLike;
   final VoidCallback onSave;
   final VoidCallback onShare;
 
   const VideoReelCard({
     super.key,
     required this.reel,
-    required this.isLiked,
     required this.isSaved,
-    required this.onLike,
     required this.onSave,
     required this.onShare,
   });
@@ -29,17 +30,13 @@ class VideoReelCard extends StatefulWidget {
 class _VideoReelCardState extends State<VideoReelCard>
     with TickerProviderStateMixin {
   late AnimationController _controller;
-  late AnimationController _heartController;
   late AnimationController _particleController;
-  late Animation<double> _heartScale;
   bool _isPaused = false;
   bool _showQuiz = false;
-  bool _showHeart = false;
   int? _selectedQuizAnswer;
   bool _quizAnswered = false;
   int _prevSceneIndex = -1;
 
-  // Particle system
   late List<_Particle> _particles;
   final _random = Random();
 
@@ -50,7 +47,6 @@ class _VideoReelCardState extends State<VideoReelCard>
   void initState() {
     super.initState();
 
-    // Main timeline controller
     _controller = AnimationController(
       vsync: this,
       duration: Duration(seconds: _totalDuration),
@@ -67,43 +63,27 @@ class _VideoReelCardState extends State<VideoReelCard>
     });
     _controller.forward();
 
-    // Heart animation
-    _heartController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    _heartScale = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.3), weight: 25),
-      TweenSequenceItem(tween: Tween(begin: 1.3, end: 0.9), weight: 15),
-      TweenSequenceItem(tween: Tween(begin: 0.9, end: 1.0), weight: 10),
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 30),
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 20),
-    ]).animate(_heartController);
-
-    // Particle system controller
     _particleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
     )..repeat();
 
-    // Generate floating particles
-    _particles = List.generate(15, (_) => _Particle.random(_random));
+    _particles = List.generate(12, (_) => _Particle.random(_random));
+
+    // Speak narration
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.reel.narration.isNotEmpty) {
+        TtsService.instance.speak(widget.reel.narration, owner: widget.reel.id);
+      }
+    });
   }
 
   @override
   void dispose() {
+    TtsService.instance.stopIfOwner(widget.reel.id);
     _controller.dispose();
-    _heartController.dispose();
     _particleController.dispose();
     super.dispose();
-  }
-
-  void _handleDoubleTap() {
-    if (!widget.isLiked) widget.onLike();
-    setState(() => _showHeart = true);
-    _heartController.forward(from: 0).then((_) {
-      if (mounted) setState(() => _showHeart = false);
-    });
   }
 
   int _currentSceneIndex(double progress) {
@@ -131,6 +111,7 @@ class _VideoReelCardState extends State<VideoReelCard>
   }
 
   void _togglePause() {
+    HapticFeedback.selectionClick();
     setState(() {
       _isPaused = !_isPaused;
       if (_isPaused) {
@@ -143,13 +124,21 @@ class _VideoReelCardState extends State<VideoReelCard>
     });
   }
 
+  void _toggleTts() {
+    HapticFeedback.lightImpact();
+    TtsService.instance.toggleMute();
+    if (!TtsService.instance.muted && widget.reel.narration.isNotEmpty) {
+      TtsService.instance.speak(widget.reel.narration, owner: widget.reel.id);
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_showQuiz) return _buildQuizView();
 
     return GestureDetector(
       onTap: _togglePause,
-      onDoubleTap: _handleDoubleTap,
       child: AnimatedBuilder(
         animation: Listenable.merge([_controller, _particleController]),
         builder: (context, child) {
@@ -158,22 +147,19 @@ class _VideoReelCardState extends State<VideoReelCard>
           final scene = scenes[sceneIdx];
           final sProgress = _sceneProgress(progress, sceneIdx);
 
-          // Detect scene change for transition
-          final isNewScene = sceneIdx != _prevSceneIndex;
-          if (isNewScene) _prevSceneIndex = sceneIdx;
+          if (sceneIdx != _prevSceneIndex) _prevSceneIndex = sceneIdx;
 
           final gradient = scene.backgroundGradient;
-          final color1 = _parseHex(gradient.isNotEmpty ? gradient[0] : '#667eea');
-          final color2 = _parseHex(gradient.length > 1 ? gradient[1] : '#764ba2');
+          final color1 =
+              _parseHex(gradient.isNotEmpty ? gradient[0] : '#667eea');
+          final color2 =
+              _parseHex(gradient.length > 1 ? gradient[1] : '#764ba2');
 
           final hasImage = scene.imageUrl.isNotEmpty;
-
-          // Cinematic Ken Burns — pan and zoom
           final scale = 1.05 + (sProgress * 0.15);
           final panX = sin(sProgress * pi) * 20;
           final panY = cos(sProgress * pi * 0.5) * 10;
 
-          // Scene transition opacity (fade in first 15%, fade out last 10%)
           double sceneOpacity = 1.0;
           if (sProgress < 0.15) {
             sceneOpacity = (sProgress / 0.15).clamp(0.0, 1.0);
@@ -184,7 +170,6 @@ class _VideoReelCardState extends State<VideoReelCard>
           return Stack(
             fit: StackFit.expand,
             children: [
-              // Background gradient (always visible as base)
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -194,15 +179,13 @@ class _VideoReelCardState extends State<VideoReelCard>
                   ),
                 ),
               ),
-
-              // AI image background with Ken Burns
               if (hasImage)
                 Opacity(
                   opacity: sceneOpacity,
                   child: Transform(
                     transform: Matrix4.identity()
-                      ..scale(scale, scale)
-                      ..translate(panX, panY),
+                      ..scaleByDouble(scale, scale, 1.0, 1.0)
+                      ..translateByDouble(panX, panY, 0.0, 0.0),
                     alignment: Alignment.center,
                     child: CachedNetworkImage(
                       imageUrl: scene.imageUrl,
@@ -210,12 +193,9 @@ class _VideoReelCardState extends State<VideoReelCard>
                       width: double.infinity,
                       height: double.infinity,
                       httpHeaders: const {'User-Agent': 'EduReels/1.0'},
-                      fadeInDuration: const Duration(milliseconds: 300),
-                      placeholder: (context, url) => Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: [color1, color2]),
-                        ),
-                      ),
+                      fadeInDuration: const Duration(milliseconds: 400),
+                      placeholder: (context, url) =>
+                          _buildShimmer([color1, color2]),
                       errorWidget: (_, __, ___) => Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(colors: [color1, color2]),
@@ -225,7 +205,6 @@ class _VideoReelCardState extends State<VideoReelCard>
                   ),
                 ),
 
-              // Cinematic dark vignette overlay
               Container(
                 decoration: BoxDecoration(
                   gradient: RadialGradient(
@@ -233,7 +212,7 @@ class _VideoReelCardState extends State<VideoReelCard>
                     radius: 1.2,
                     colors: [
                       Colors.black.withValues(alpha: 0.15),
-                      Colors.black.withValues(alpha: 0.55),
+                      Colors.black.withValues(alpha: 0.6),
                     ],
                   ),
                 ),
@@ -246,60 +225,49 @@ class _VideoReelCardState extends State<VideoReelCard>
                     colors: [
                       Colors.black.withValues(alpha: 0.3),
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.6),
+                      Colors.black.withValues(alpha: 0.7),
                     ],
                     stops: const [0.0, 0.4, 1.0],
                   ),
                 ),
               ),
 
-              // Floating particles
-              ..._buildParticles(),
+              IgnorePointer(child: Stack(children: _buildParticles())),
 
-              // Scene content with cinematic animations
               _buildCinematicScene(scene, sProgress, sceneOpacity),
 
-              // Story progress bars
               _buildProgressBars(progress),
 
-              // Top bar: VIDEO badge + subject
               Positioned(
                 top: 0, left: 0, right: 0,
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
                     child: Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFFF416C), Color(0xFFFF4B2B)],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFF416C).withValues(alpha: 0.4),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.play_circle_fill, color: Colors.white, size: 14),
-                              SizedBox(width: 4),
-                              Text('VIDEO', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                            ],
-                          ),
+                        _glassChip(
+                          icon: Icons.play_circle_fill_rounded,
+                          label: 'VIDEO',
+                          tint: AppTheme.accent,
                         ),
                         const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(16)),
-                          child: Text(widget.reel.subject,
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                        _glassChip(
+                          icon: Icons.auto_awesome_rounded,
+                          label: widget.reel.subject.isEmpty
+                              ? 'Study'
+                              : widget.reel.subject,
+                        ),
+                        const Spacer(),
+                        ValueListenableBuilder<bool>(
+                          valueListenable: TtsService.instance.isMuted,
+                          builder: (context, muted, _) => _glassIconButton(
+                            icon: muted
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded,
+                            onTap: _toggleTts,
+                            tint:
+                                muted ? Colors.white70 : AppTheme.accentWarm,
+                          ),
                         ),
                       ],
                     ),
@@ -307,91 +275,132 @@ class _VideoReelCardState extends State<VideoReelCard>
                 ),
               ),
 
-              // Pause overlay
               if (_isPaused)
                 Container(
                   color: Colors.black26,
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
-                        color: Colors.black45,
+                        color: Colors.white.withValues(alpha: 0.18),
                         shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: Colors.white.withValues(alpha: 0.1), blurRadius: 20)],
+                        boxShadow:
+                            AppTheme.glowShadow(Colors.white),
                       ),
-                      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 56),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 56,
+                      ),
                     ),
                   ),
                 ),
 
-              // Right side actions
+              // Right action rail
               Positioned(
-                right: 12, bottom: 100,
+                right: 12, bottom: 120,
                 child: Column(
                   children: [
                     _buildActionButton(
-                      icon: widget.isLiked ? Icons.favorite : Icons.favorite_border,
-                      label: '${widget.reel.likes}',
-                      color: widget.isLiked ? Colors.redAccent : Colors.white,
-                      onTap: widget.onLike,
+                      icon: widget.isSaved
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      label: widget.isSaved ? 'Solved' : 'Mark',
+                      color: widget.isSaved
+                          ? AppTheme.success
+                          : Colors.white,
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        widget.onSave();
+                      },
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 22),
                     _buildActionButton(
-                      icon: widget.isSaved ? Icons.bookmark : Icons.bookmark_border,
-                      label: 'Save',
-                      color: widget.isSaved ? Colors.amber : Colors.white,
-                      onTap: widget.onSave,
-                    ),
-                    const SizedBox(height: 20),
-                    _buildActionButton(
-                      icon: Icons.share_rounded,
+                      icon: Icons.ios_share_rounded,
                       label: 'Share',
                       color: Colors.white,
-                      onTap: widget.onShare,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        widget.onShare();
+                      },
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 22),
                     _buildActionButton(
                       icon: Icons.menu_book_rounded,
                       label: 'Source',
                       color: Colors.white,
-                      onTap: () => SourceViewerSheet.show(
-                        context,
-                        sourceQuote: widget.reel.sourceQuote,
-                        pageNumber: widget.reel.pageNumber,
-                        reelTitle: widget.reel.title,
-                      ),
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        SourceViewerSheet.show(
+                          context,
+                          sourceQuote: widget.reel.sourceQuote,
+                          pageNumber: widget.reel.pageNumber,
+                          reelTitle: widget.reel.title,
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
 
-              // Bottom: just subject badge
               Positioned(
-                bottom: 30, left: 20, right: 80,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(widget.reel.subject,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
-                  ),
+                bottom: 36, left: 20, right: 90,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.reel.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        shadows: [
+                          Shadow(blurRadius: 8, color: Colors.black54)
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.description_outlined,
+                            color: Colors.white70, size: 14),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            widget.reel.pdfName.isEmpty
+                                ? 'Study reel'
+                                : widget.reel.pdfName,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        if (widget.reel.pageNumber > 0) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'p.${widget.reel.pageNumber}',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
               ),
-
-              // Double-tap heart
-              if (_showHeart)
-                Center(
-                  child: AnimatedBuilder(
-                    animation: _heartScale,
-                    builder: (context, child) => Transform.scale(
-                      scale: _heartScale.value,
-                      child: Icon(Icons.favorite, color: Colors.white.withValues(alpha: 0.9), size: 100,
-                        shadows: const [Shadow(blurRadius: 30, color: Colors.redAccent)]),
-                    ),
-                  ),
-                ),
             ],
           );
         },
@@ -399,18 +408,16 @@ class _VideoReelCardState extends State<VideoReelCard>
     );
   }
 
-  // Cinematic scene with word-by-word text reveal and animated emoji
-  Widget _buildCinematicScene(ReelScene scene, double progress, double opacity) {
-    // Word-by-word reveal
+  Widget _buildCinematicScene(
+      ReelScene scene, double progress, double opacity) {
     final words = scene.text.split(' ');
-    final visibleWords = (words.length * progress * 1.3).ceil().clamp(0, words.length);
+    final visibleWords =
+        (words.length * progress * 1.3).ceil().clamp(0, words.length);
 
-    // Emoji bounce timing
     final emojiScale = progress < 0.15
         ? Curves.elasticOut.transform((progress / 0.15).clamp(0.0, 1.0))
         : 1.0;
 
-    // Subtle floating motion for content
     final floatY = sin(progress * pi * 2) * 3;
 
     return Opacity(
@@ -419,76 +426,93 @@ class _VideoReelCardState extends State<VideoReelCard>
         offset: Offset(0, floatY),
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 36),
+            padding: const EdgeInsets.fromLTRB(28, 80, 28, 180),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Animated emoji with glow
                 Transform.scale(
                   scale: emojiScale,
                   child: Container(
-                    padding: const EdgeInsets.all(16),
+                    width: 96,
+                    height: 96,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          blurRadius: 30,
-                          spreadRadius: 5,
-                        ),
-                      ],
+                      gradient: RadialGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.25),
+                          Colors.white.withValues(alpha: 0.04),
+                        ],
+                      ),
+                      boxShadow: AppTheme.glowShadow(AppTheme.accent),
                     ),
-                    child: Text(scene.emoji, style: const TextStyle(fontSize: 64)),
+                    alignment: Alignment.center,
+                    child: Text(scene.emoji,
+                        style: const TextStyle(fontSize: 56)),
                   ),
                 ),
                 const SizedBox(height: 28),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 22, vertical: 18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          width: 1,
+                        ),
+                      ),
+                      child: RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          children: List.generate(words.length, (i) {
+                            final isVisible = i < visibleWords;
+                            final isLatest =
+                                i == visibleWords - 1 && progress < 0.85;
 
-                // Word-by-word text with highlight on latest word
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                  ),
-                  child: RichText(
-                    textAlign: TextAlign.center,
-                    text: TextSpan(
-                      children: List.generate(words.length, (i) {
-                        final isVisible = i < visibleWords;
-                        final isLatest = i == visibleWords - 1 && progress < 0.85;
-
-                        return TextSpan(
-                          text: '${words[i]} ',
-                          style: TextStyle(
-                            color: isVisible
-                                ? (isLatest ? Colors.white : Colors.white.withValues(alpha: 0.95))
-                                : Colors.transparent,
-                            fontSize: 22,
-                            fontWeight: isLatest ? FontWeight.w900 : FontWeight.bold,
-                            height: 1.5,
-                            shadows: isVisible
-                                ? [
-                                    const Shadow(blurRadius: 10, color: Colors.black54),
-                                    if (isLatest)
-                                      Shadow(blurRadius: 20, color: Colors.white.withValues(alpha: 0.3)),
-                                  ]
-                                : null,
-                          ),
-                        );
-                      }),
+                            return TextSpan(
+                              text: '${words[i]} ',
+                              style: TextStyle(
+                                color: isVisible
+                                    ? Colors.white
+                                    : Colors.transparent,
+                                fontSize: 22,
+                                fontWeight: isLatest
+                                    ? FontWeight.w900
+                                    : FontWeight.w700,
+                                height: 1.45,
+                                shadows: isVisible
+                                    ? [
+                                        const Shadow(
+                                            blurRadius: 10,
+                                            color: Colors.black54),
+                                        if (isLatest)
+                                          Shadow(
+                                            blurRadius: 20,
+                                            color: AppTheme.accent
+                                                .withValues(alpha: 0.4),
+                                          ),
+                                      ]
+                                    : null,
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-
-                // Scene counter
                 const SizedBox(height: 20),
                 Text(
                   'Scene ${_currentSceneIndex(_controller.value) + 1} of ${scenes.length}',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
+                    color: Colors.white.withValues(alpha: 0.5),
                     fontSize: 12,
-                    letterSpacing: 1,
+                    letterSpacing: 1.5,
                   ),
                 ),
               ],
@@ -499,14 +523,14 @@ class _VideoReelCardState extends State<VideoReelCard>
     );
   }
 
-  // Floating particles for cinematic feel
   List<Widget> _buildParticles() {
     final t = _particleController.value;
     final screenSize = MediaQuery.sizeOf(context);
     return _particles.map((p) {
       final x = p.x + sin((t + p.phase) * pi * 2) * p.drift;
       final y = (p.y - t * p.speed * 0.3) % 1.0;
-      final opacity = (sin((t + p.phase) * pi * 2) * 0.5 + 0.5) * p.maxOpacity;
+      final opacity =
+          (sin((t + p.phase) * pi * 2) * 0.5 + 0.5) * p.maxOpacity;
 
       return Positioned(
         left: x * screenSize.width,
@@ -519,7 +543,8 @@ class _VideoReelCardState extends State<VideoReelCard>
             color: Colors.white.withValues(alpha: opacity.clamp(0.0, 1.0)),
             boxShadow: [
               BoxShadow(
-                color: Colors.white.withValues(alpha: (opacity * 0.5).clamp(0.0, 1.0)),
+                color: Colors.white
+                    .withValues(alpha: (opacity * 0.5).clamp(0.0, 1.0)),
                 blurRadius: p.size * 2,
               ),
             ],
@@ -534,7 +559,7 @@ class _VideoReelCardState extends State<VideoReelCard>
       top: 0, left: 0, right: 0,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
           child: Row(
             children: List.generate(scenes.length, (i) {
               double start = 0;
@@ -557,11 +582,12 @@ class _VideoReelCardState extends State<VideoReelCard>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(3),
                     child: LinearProgressIndicator(
                       value: barProgress,
                       backgroundColor: Colors.white24,
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(Colors.white),
                       minHeight: 3,
                     ),
                   ),
@@ -577,110 +603,222 @@ class _VideoReelCardState extends State<VideoReelCard>
   Widget _buildQuizView() {
     if (widget.reel.quiz == null) return const SizedBox();
     final quiz = widget.reel.quiz!;
-
     final lastScene = scenes.isNotEmpty ? scenes.last : null;
     final hasImage = lastScene != null && lastScene.imageUrl.isNotEmpty;
-    final color1 = _parseHex(lastScene?.backgroundGradient.isNotEmpty == true ? lastScene!.backgroundGradient[0] : '#667eea');
-    final color2 = _parseHex(lastScene?.backgroundGradient.length == 2 ? lastScene!.backgroundGradient[1] : '#764ba2');
+    final color1 = _parseHex(
+        lastScene?.backgroundGradient.isNotEmpty == true
+            ? lastScene!.backgroundGradient[0]
+            : '#667eea');
+    final color2 = _parseHex(lastScene?.backgroundGradient.length == 2
+        ? lastScene!.backgroundGradient[1]
+        : '#764ba2');
 
     return Stack(
       fit: StackFit.expand,
       children: [
         if (hasImage)
           CachedNetworkImage(
-            imageUrl: lastScene!.imageUrl,
+            imageUrl: lastScene.imageUrl,
             fit: BoxFit.cover,
             httpHeaders: const {'User-Agent': 'EduReels/1.0'},
             fadeInDuration: const Duration(milliseconds: 300),
-            errorWidget: (_, __, ___) => Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [color1, color2]))),
+            placeholder: (context, url) => _buildShimmer([color1, color2]),
+            errorWidget: (_, __, ___) => Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [color1, color2]),
+              ),
+            ),
           )
         else
-          Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [color1, color2]))),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color1, color2],
+              ),
+            ),
+          ),
 
-        Container(color: Colors.black.withValues(alpha: hasImage ? 0.65 : 0.0)),
+        Container(color: Colors.black.withValues(alpha: hasImage ? 0.7 : 0.0)),
 
         Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 80, 24, 160),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('🧠', style: TextStyle(fontSize: 44)),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(colors: [
+                      AppTheme.accent.withValues(alpha: 0.35),
+                      Colors.transparent,
+                    ]),
+                  ),
+                  child: const Text('🧠', style: TextStyle(fontSize: 44)),
+                ),
                 const SizedBox(height: 12),
-                const Text('Quick Quiz!', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Quick Quiz!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 14),
-                Text(quiz.question, style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.4), textAlign: TextAlign.center),
-                const SizedBox(height: 20),
+                Text(
+                  quiz.question,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
                 ...quiz.options.asMap().entries.map((entry) {
                   final i = entry.key;
                   final option = entry.value;
                   final isCorrect = i == quiz.answer;
                   final isSelected = _selectedQuizAnswer == i;
 
-                  Color bgColor = Colors.white.withValues(alpha: 0.12);
+                  Color bgColor = Colors.white.withValues(alpha: 0.1);
                   Color borderColor = Colors.white.withValues(alpha: 0.2);
                   if (_quizAnswered) {
-                    if (isCorrect) { bgColor = Colors.green.withValues(alpha: 0.4); borderColor = Colors.greenAccent; }
-                    else if (isSelected) { bgColor = Colors.red.withValues(alpha: 0.4); borderColor = Colors.redAccent; }
-                  } else if (isSelected) { bgColor = Colors.white.withValues(alpha: 0.25); borderColor = Colors.white; }
+                    if (isCorrect) {
+                      bgColor = AppTheme.success.withValues(alpha: 0.35);
+                      borderColor = AppTheme.success;
+                    } else if (isSelected) {
+                      bgColor = AppTheme.danger.withValues(alpha: 0.3);
+                      borderColor = AppTheme.danger;
+                    }
+                  } else if (isSelected) {
+                    bgColor = Colors.white.withValues(alpha: 0.2);
+                    borderColor = Colors.white;
+                  }
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: GestureDetector(
-                      onTap: _quizAnswered ? null : () => setState(() { _selectedQuizAnswer = i; _quizAnswered = true; }),
+                      onTap: _quizAnswered
+                          ? null
+                          : () {
+                              HapticFeedback.mediumImpact();
+                              setState(() {
+                                _selectedQuizAnswer = i;
+                                _quizAnswered = true;
+                              });
+                              TtsService.instance.speak(
+                                i == quiz.answer
+                                    ? 'Correct! ${quiz.explanation}'
+                                    : 'Not quite. ${quiz.explanation}',
+                                owner: widget.reel.id,
+                              );
+                            },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         width: double.infinity,
                         padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor, width: 1.5)),
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border:
+                              Border.all(color: borderColor, width: 1.5),
+                        ),
                         child: Row(
                           children: [
                             Container(
-                              width: 28, height: 28,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.15)),
-                              child: Center(child: Text(String.fromCharCode(65 + i), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.15),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  String.fromCharCode(65 + i),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
                             ),
                             const SizedBox(width: 12),
-                            Expanded(child: Text(option, style: const TextStyle(color: Colors.white, fontSize: 15))),
-                            if (_quizAnswered && isCorrect) const Icon(Icons.check_circle, color: Colors.greenAccent, size: 22),
-                            if (_quizAnswered && isSelected && !isCorrect) const Icon(Icons.cancel, color: Colors.redAccent, size: 22),
+                            Expanded(
+                              child: Text(option,
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 15)),
+                            ),
+                            if (_quizAnswered && isCorrect)
+                              const Icon(Icons.check_circle,
+                                  color: AppTheme.success, size: 22),
+                            if (_quizAnswered && isSelected && !isCorrect)
+                              const Icon(Icons.cancel,
+                                  color: AppTheme.danger, size: 22),
                           ],
                         ),
                       ),
                     ),
                   );
                 }),
-
                 if (_quizAnswered && quiz.explanation.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.lightbulb, color: Colors.amberAccent, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(quiz.explanation, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14, height: 1.4))),
-                      ],
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.lightbulb,
+                                color: AppTheme.accentWarm, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(quiz.explanation,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    height: 1.4,
+                                  )),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
-
                 if (_quizAnswered) ...[
                   const SizedBox(height: 16),
                   TextButton.icon(
                     onPressed: () {
-                      setState(() { _showQuiz = false; _quizAnswered = false; _selectedQuizAnswer = null; _prevSceneIndex = -1; });
+                      setState(() {
+                        _showQuiz = false;
+                        _quizAnswered = false;
+                        _selectedQuizAnswer = null;
+                        _prevSceneIndex = -1;
+                      });
                       _controller.reset();
                       _controller.forward();
                     },
-                    icon: const Icon(Icons.replay, color: Colors.white70, size: 18),
-                    label: const Text('Replay', style: TextStyle(color: Colors.white70, fontSize: 15)),
+                    icon: const Icon(Icons.replay_rounded,
+                        color: Colors.white70, size: 18),
+                    label: const Text('Replay',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 15)),
                   ),
                 ],
               ],
@@ -701,29 +839,122 @@ class _VideoReelCardState extends State<VideoReelCard>
       onTap: onTap,
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 28),
+          ClipOval(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(color: color, fontSize: 11,
-            shadows: const [Shadow(blurRadius: 4, color: Colors.black38)])),
+          const SizedBox(height: 6),
+          Text(label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                shadows: const [Shadow(blurRadius: 4, color: Colors.black54)],
+              )),
         ],
+      ),
+    );
+  }
+
+  Widget _buildShimmer(List<Color> colors) {
+    return Shimmer.fromColors(
+      baseColor: colors[0].withValues(alpha: 0.4),
+      highlightColor: colors[1].withValues(alpha: 0.6),
+      period: const Duration(milliseconds: 1500),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: colors,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: const Icon(Icons.image_rounded,
+            size: 72, color: Colors.white24),
+      ),
+    );
+  }
+
+  Widget _glassChip(
+      {required IconData icon,
+      required String label,
+      Color tint = Colors.white}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.22),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: tint, size: 14),
+              const SizedBox(width: 5),
+              Text(label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _glassIconButton(
+      {required IconData icon,
+      required VoidCallback onTap,
+      Color tint = Colors.white}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.22),
+                width: 1,
+              ),
+            ),
+            child: Icon(icon, color: tint, size: 18),
+          ),
+        ),
       ),
     );
   }
 }
 
-// Particle data for floating light effects
 class _Particle {
-  final double x;
-  final double y;
-  final double size;
-  final double speed;
-  final double phase;
-  final double drift;
-  final double maxOpacity;
+  final double x, y, size, speed, phase, drift, maxOpacity;
 
   _Particle({
     required this.x,

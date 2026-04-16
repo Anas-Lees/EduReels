@@ -1,8 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/reel.dart';
 import '../services/api_service.dart';
 
+/// Manages the global reel state — upload streaming, "solved" (mark-as-seen)
+/// tracking, and caching. "Solved" replaces the old like+save concept: the
+/// user simply marks a reel as done/understood, and we resume from the next
+/// unsolved reel the next time they open the same PDF.
 class ReelProvider extends ChangeNotifier {
   List<Reel> _reels = [];
   List<Reel> _myReels = [];
@@ -17,8 +22,10 @@ class ReelProvider extends ChangeNotifier {
   String? _error;
   String? _myReelsError;
   String? _uploadStatus;
-  final Set<String> _likedReels = {};
-  final Set<String> _savedReels = {};
+  final Set<String> _solvedReels = {};
+  bool _prefsLoaded = false;
+
+  static const _solvedKey = 'solved_reels_v1';
 
   List<Reel> get reels => _reels;
   List<Reel> get myReels => _myReels;
@@ -34,19 +41,40 @@ class ReelProvider extends ChangeNotifier {
   String? get myReelsError => _myReelsError;
   String? get uploadStatus => _uploadStatus;
 
-  bool isLiked(String reelId) => _likedReels.contains(reelId);
-  bool isSaved(String reelId) => _savedReels.contains(reelId);
+  bool isSaved(String reelId) => _solvedReels.contains(reelId);
+  bool isSolved(String reelId) => _solvedReels.contains(reelId);
+
+  ReelProvider() {
+    _loadSolvedFromPrefs();
+  }
+
+  Future<void> _loadSolvedFromPrefs() async {
+    if (_prefsLoaded) return;
+    _prefsLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_solvedKey) ?? [];
+      _solvedReels.addAll(list);
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> _persistSolved() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_solvedKey, _solvedReels.toList());
+    } catch (_) {}
+  }
 
   Future<void> loadReels() async {
     _loading = true;
     _error = null;
     notifyListeners();
-
     try {
       _reels = await ApiService.getReels();
       _loading = false;
       notifyListeners();
-    } catch (e) {
+    } catch (_) {
       _error = 'Failed to load reels';
       _loading = false;
       notifyListeners();
@@ -57,21 +85,26 @@ class ReelProvider extends ChangeNotifier {
     _loadingMyReels = true;
     _myReelsError = null;
     notifyListeners();
-
     try {
       _myReels = await ApiService.getMyReels();
       _loadingMyReels = false;
       notifyListeners();
-    } catch (e) {
+    } catch (_) {
       _myReelsError = 'Failed to load your reels';
       _loadingMyReels = false;
       notifyListeners();
     }
   }
 
-  // Streaming upload - reels appear one by one
-  Future<void> uploadPdfStreaming(String? filePath, String fileName,
-      String subject, {Uint8List? fileBytes, String style = 'realistic', String? groupId, String? explanationStyle}) async {
+  Future<void> uploadPdfStreaming(
+    String? filePath,
+    String fileName,
+    String subject, {
+    Uint8List? fileBytes,
+    String style = 'realistic',
+    String? groupId,
+    String? explanationStyle,
+  }) async {
     _uploading = true;
     _isGenerating = false;
     _generatingTotal = 0;
@@ -84,7 +117,9 @@ class ReelProvider extends ChangeNotifier {
 
     try {
       final stream = ApiService.uploadPdfStream(
-        filePath, fileName, subject,
+        filePath,
+        fileName,
+        subject,
         fileBytes: fileBytes,
         style: style,
         groupId: groupId,
@@ -102,11 +137,11 @@ class ReelProvider extends ChangeNotifier {
 
           case 'reel':
             final reel = Reel.fromJson(event.data);
-            _reels.insert(0, reel); // Add to top of feed
+            _reels.insert(0, reel);
             _myReels.insert(0, reel);
             _generatingDone++;
             _uploadStatus =
-                'Generated $_generatingDone of $_generatingTotal reels';
+                'Generated $_generatingDone reels so far…';
             notifyListeners();
             break;
 
@@ -114,13 +149,14 @@ class ReelProvider extends ChangeNotifier {
             _uploading = false;
             _isGenerating = false;
             _uploadStatus =
-                '${event.data['totalReels'] ?? _generatingDone} reels created!';
+                '${event.data['totalReels'] ?? _generatingDone} reels ready!';
             notifyListeners();
             break;
 
           case 'page_start':
             _currentPage = event.data['pageNumber'] ?? 0;
-            _uploadStatus = 'Page $_currentPage of $_totalPages — ${event.data['conceptCount'] ?? 0} concepts found';
+            _uploadStatus =
+                'Page $_currentPage of $_totalPages — ${event.data['conceptCount'] ?? 0} concepts';
             notifyListeners();
             break;
 
@@ -131,7 +167,6 @@ class ReelProvider extends ChangeNotifier {
             break;
 
           case 'error':
-            // Log but continue - don't stop for individual reel errors
             break;
         }
       }
@@ -144,24 +179,21 @@ class ReelProvider extends ChangeNotifier {
     }
   }
 
-  // Original bulk upload (fallback)
-  Future<void> uploadPdf(String? filePath, String fileName, String subject,
+  Future<void> uploadPdf(
+      String? filePath, String fileName, String subject,
       {Uint8List? fileBytes}) async {
     _uploading = true;
     _uploadStatus = 'Uploading PDF...';
     _error = null;
     notifyListeners();
-
     try {
       _uploadStatus = 'AI is generating reels...';
       notifyListeners();
-
       final result = await ApiService.uploadPdf(filePath, fileName, subject,
           fileBytes: fileBytes);
-      _uploadStatus = '${result['reelCount']} reels created!';
+      _uploadStatus = '${result['reelCount']} reels ready!';
       _uploading = false;
       notifyListeners();
-
       await loadReels();
       await loadMyReels();
     } catch (e) {
@@ -172,63 +204,23 @@ class ReelProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleLike(String reelId) async {
-    // Optimistic update — instant UI
-    final wasLiked = _likedReels.contains(reelId);
-    if (wasLiked) {
-      _likedReels.remove(reelId);
-    } else {
-      _likedReels.add(reelId);
-    }
-    notifyListeners();
-
-    try {
-      final liked = await ApiService.toggleLike(reelId);
-      // Sync with server truth
-      if (liked) {
-        _likedReels.add(reelId);
-      } else {
-        _likedReels.remove(reelId);
-      }
-      notifyListeners();
-    } catch (e) {
-      // Revert on failure
-      if (wasLiked) {
-        _likedReels.add(reelId);
-      } else {
-        _likedReels.remove(reelId);
-      }
-      notifyListeners();
-    }
-  }
-
+  /// Toggle the "solved" state for a reel. Persisted locally so that the
+  /// user can resume from the next unsolved reel on return.
   Future<void> toggleSave(String reelId) async {
-    // Optimistic update — instant UI
-    final wasSaved = _savedReels.contains(reelId);
-    if (wasSaved) {
-      _savedReels.remove(reelId);
+    final wasSolved = _solvedReels.contains(reelId);
+    if (wasSolved) {
+      _solvedReels.remove(reelId);
     } else {
-      _savedReels.add(reelId);
+      _solvedReels.add(reelId);
     }
     notifyListeners();
+    await _persistSolved();
 
+    // Best-effort sync with the server save endpoint. Ignore failures —
+    // the local state is the source of truth for resume behaviour.
     try {
-      final saved = await ApiService.toggleSave(reelId);
-      if (saved) {
-        _savedReels.add(reelId);
-      } else {
-        _savedReels.remove(reelId);
-      }
-      notifyListeners();
-    } catch (e) {
-      // Revert on failure
-      if (wasSaved) {
-        _savedReels.add(reelId);
-      } else {
-        _savedReels.remove(reelId);
-      }
-      notifyListeners();
-    }
+      await ApiService.toggleSave(reelId);
+    } catch (_) {}
   }
 
   void trackView(String reelId) {

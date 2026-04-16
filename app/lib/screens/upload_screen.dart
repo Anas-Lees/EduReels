@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/reel_provider.dart';
 import '../providers/group_provider.dart';
+import '../theme/app_theme.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -24,13 +26,13 @@ class _UploadScreenState extends State<UploadScreen>
   late final AnimationController _pulseController;
 
   static const _styles = [
-    {'id': 'realistic', 'name': 'Realistic', 'icon': Icons.camera_alt},
-    {'id': 'anime', 'name': 'Anime', 'icon': Icons.auto_awesome},
-    {'id': 'watercolor', 'name': 'Watercolor', 'icon': Icons.brush},
-    {'id': '3d', 'name': '3D Render', 'icon': Icons.view_in_ar},
-    {'id': 'comic', 'name': 'Comic', 'icon': Icons.burst_mode},
-    {'id': 'minimalist', 'name': 'Minimal', 'icon': Icons.crop_square},
-    {'id': 'scifi', 'name': 'Sci-Fi', 'icon': Icons.rocket_launch},
+    {'id': 'realistic', 'name': 'Realistic', 'icon': Icons.camera_alt_rounded},
+    {'id': 'anime', 'name': 'Anime', 'icon': Icons.auto_awesome_rounded},
+    {'id': 'watercolor', 'name': 'Watercolor', 'icon': Icons.brush_rounded},
+    {'id': '3d', 'name': '3D Render', 'icon': Icons.view_in_ar_rounded},
+    {'id': 'comic', 'name': 'Comic', 'icon': Icons.burst_mode_rounded},
+    {'id': 'minimalist', 'name': 'Minimal', 'icon': Icons.crop_square_rounded},
+    {'id': 'scifi', 'name': 'Sci-Fi', 'icon': Icons.rocket_launch_rounded},
   ];
 
   static const _styleColors = {
@@ -63,6 +65,7 @@ class _UploadScreenState extends State<UploadScreen>
   }
 
   Future<void> _pickFile() async {
+    HapticFeedback.selectionClick();
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
@@ -81,7 +84,8 @@ class _UploadScreenState extends State<UploadScreen>
     if ((_selectedFile == null && _selectedFileBytes == null) ||
         _selectedGroupId == null) return;
 
-    // Use cleaned PDF name as subject
+    HapticFeedback.mediumImpact();
+
     final subject = _selectedFileName
             ?.replaceAll('.pdf', '')
             .replaceAll('.PDF', '')
@@ -90,11 +94,13 @@ class _UploadScreenState extends State<UploadScreen>
             .trim() ??
         'General';
 
-    // Find the group name for the snackbar
     final groups = context.read<GroupProvider>().groups;
-    final groupName = groups.where((g) => g.id == _selectedGroupId).map((g) => g.name).firstOrNull ?? 'group';
+    final groupName = groups
+            .where((g) => g.id == _selectedGroupId)
+            .map((g) => g.name)
+            .firstOrNull ??
+        'group';
 
-    // Start streaming upload (runs in background via provider)
     context.read<ReelProvider>().uploadPdfStreaming(
           _selectedFile,
           _selectedFileName!,
@@ -102,21 +108,28 @@ class _UploadScreenState extends State<UploadScreen>
           fileBytes: _selectedFileBytes,
           style: _selectedStyle,
           groupId: _selectedGroupId,
-          explanationStyle: _explanationController.text.isNotEmpty ? _explanationController.text : null,
+          explanationStyle: _explanationController.text.isNotEmpty
+              ? _explanationController.text
+              : null,
         );
 
-    // Show a brief non-blocking snackbar and reset form
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Generating reels in "$groupName"...'),
-        backgroundColor: const Color(0xFF667eea),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Row(
+          children: [
+            const Icon(Icons.auto_awesome_rounded,
+                color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Generating reels in "$groupName"…'),
+            ),
+          ],
+        ),
+        backgroundColor: AppTheme.primary,
         duration: const Duration(seconds: 3),
       ),
     );
 
-    // Reset form so user can navigate away
     setState(() {
       _selectedFile = null;
       _selectedFileName = null;
@@ -134,107 +147,119 @@ class _UploadScreenState extends State<UploadScreen>
     final reelProvider = context.watch<ReelProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0a0a1a),
-      appBar: AppBar(
-        title: const Text('Create Reels',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Upload area
-            _buildUploadArea(reelProvider),
-            const SizedBox(height: 28),
-
-            // Style picker
-            _buildSectionLabel('Visual Style'),
-            const SizedBox(height: 4),
-            Text(
-              'AI-generated backgrounds for each slide',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            _buildStylePicker(),
-            const SizedBox(height: 28),
-
-            // Group picker
-            _buildSectionLabel('Group'),
-            const SizedBox(height: 12),
-            _buildGroupPicker(),
-            const SizedBox(height: 28),
-
-            // Explanation style
-            _buildSectionLabel('Explanation Style (Optional)'),
-            const SizedBox(height: 4),
-            Text(
-              'e.g. "Explain in terms of football" or "Use cooking analogies"',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _explanationController,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 2,
-              decoration: InputDecoration(
-                hintText: 'How would you like concepts explained?',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFF667eea)),
+      backgroundColor: AppTheme.bg,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildTitle(),
+              const SizedBox(height: 24),
+              _buildUploadArea(reelProvider),
+              const SizedBox(height: 28),
+              _buildSectionLabel('Visual style',
+                  subtitle: 'Pick a look for AI-generated backgrounds'),
+              const SizedBox(height: 12),
+              _buildStylePicker(),
+              const SizedBox(height: 28),
+              _buildSectionLabel('Save into group',
+                  subtitle: 'Reels are added to this group'),
+              const SizedBox(height: 12),
+              _buildGroupPicker(),
+              const SizedBox(height: 28),
+              _buildSectionLabel('Explain like…',
+                  subtitle:
+                      'Optional — e.g. "Explain using cooking analogies"'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _explanationController,
+                style: const TextStyle(color: AppTheme.textPrimary),
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  hintText: 'How would you like concepts explained?',
                 ),
               ),
-            ),
-            const SizedBox(height: 28),
-
-            // Upload status
-            if (reelProvider.uploading || reelProvider.uploadStatus != null)
-              _buildUploadStatus(reelProvider),
-
-            // Error
-            if (reelProvider.error != null) _buildError(reelProvider),
-
-            // Generate button
-            _buildGenerateButton(reelProvider),
-            const SizedBox(height: 14),
-            Center(
-              child: Text(
-                'AI generates reels for every page of your PDF',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  fontSize: 12,
+              const SizedBox(height: 28),
+              if (reelProvider.uploading || reelProvider.uploadStatus != null)
+                _buildUploadStatus(reelProvider),
+              if (reelProvider.error != null) _buildError(reelProvider),
+              _buildGenerateButton(reelProvider),
+              const SizedBox(height: 12),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.bolt_rounded,
+                        size: 14, color: AppTheme.textMuted),
+                    const SizedBox(width: 6),
+                    Text(
+                      'AI reels · narrated · page-by-page',
+                      style: TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSectionLabel(String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.9),
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.2,
-      ),
+  Widget _buildTitle() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ShaderMask(
+          shaderCallback: (bounds) =>
+              AppTheme.primaryGradient.createShader(bounds),
+          child: const Text(
+            'Create reels',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              letterSpacing: -0.8,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Drop a PDF, pick a style, and we\'ll turn it into scrollable study reels.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionLabel(String text, {String? subtitle}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          text,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -244,92 +269,129 @@ class _UploadScreenState extends State<UploadScreen>
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         width: double.infinity,
-        height: 160,
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: _hasFile
               ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    const Color(0xFF667eea).withValues(alpha: 0.15),
-                    const Color(0xFF764ba2).withValues(alpha: 0.15),
+                    AppTheme.primary.withValues(alpha: 0.22),
+                    AppTheme.accent.withValues(alpha: 0.18),
                   ],
                 )
               : null,
-          color: _hasFile ? null : Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(20),
+          color: _hasFile ? null : AppTheme.surfaceHigh,
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(
             color: _hasFile
-                ? const Color(0xFF667eea).withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.08),
-            width: _hasFile ? 2 : 1.5,
+                ? AppTheme.primary.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.06),
+            width: _hasFile ? 1.5 : 1,
           ),
+          boxShadow: _hasFile
+              ? AppTheme.glowShadow(AppTheme.primary)
+              : null,
         ),
-        child: _hasFile
-            ? Row(
+        child: _hasFile ? _buildFileRow() : _buildDropRow(),
+      ),
+    );
+  }
+
+  Widget _buildFileRow() {
+    return Row(
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: AppTheme.primaryGradient,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: AppTheme.glowShadow(AppTheme.accent),
+          ),
+          child: const Icon(Icons.picture_as_pdf_rounded,
+              size: 28, color: Colors.white),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _selectedFileName ?? '',
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Row(
                 children: [
-                  const SizedBox(width: 24),
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF667eea).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(14),
+                  const Icon(Icons.check_circle_rounded,
+                      size: 14, color: AppTheme.success),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'Ready — tap to change',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
                     ),
-                    child: const Icon(Icons.picture_as_pdf_rounded, size: 28, color: Color(0xFF667eea)),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _selectedFileName ?? '',
-                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tap to change file',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.swap_horiz_rounded, color: Colors.white.withValues(alpha: 0.25), size: 22),
-                  const SizedBox(width: 20),
-                ],
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.cloud_upload_rounded, size: 32, color: Colors.white.withValues(alpha: 0.35)),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Tap to select PDF',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 15, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'PDF up to 50MB',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 12),
                   ),
                 ],
               ),
+            ],
+          ),
+        ),
+        const Icon(Icons.swap_horiz_rounded, color: AppTheme.textMuted),
+      ],
+    );
+  }
+
+  Widget _buildDropRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppTheme.primary.withValues(alpha: 0.25),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            child: const Icon(Icons.cloud_upload_rounded,
+                size: 38, color: AppTheme.primary),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Tap to pick a PDF',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Works best with lectures, notes, slides',
+            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildStylePicker() {
     return SizedBox(
-      height: 120,
+      height: 118,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _styles.length,
@@ -341,10 +403,13 @@ class _UploadScreenState extends State<UploadScreen>
           final colors = _styleColors[id] ?? [Colors.grey, Colors.grey];
 
           return GestureDetector(
-            onTap: () => setState(() => _selectedStyle = id),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _selectedStyle = id);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 250),
-              width: 90,
+              width: 94,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -352,20 +417,22 @@ class _UploadScreenState extends State<UploadScreen>
                   colors: isSelected
                       ? colors
                       : [
-                          colors[0].withValues(alpha: 0.3),
-                          colors[1].withValues(alpha: 0.3),
+                          colors[0].withValues(alpha: 0.25),
+                          colors[1].withValues(alpha: 0.25),
                         ],
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: isSelected ? Colors.white : Colors.transparent,
-                  width: 2,
+                  color: isSelected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.05),
+                  width: isSelected ? 2 : 1,
                 ),
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
-                          color: colors[0].withValues(alpha: 0.4),
-                          blurRadius: 12,
+                          color: colors[0].withValues(alpha: 0.45),
+                          blurRadius: 16,
                           spreadRadius: 1,
                         )
                       ]
@@ -374,28 +441,30 @@ class _UploadScreenState extends State<UploadScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    style['icon'] as IconData,
-                    color: Colors.white,
-                    size: isSelected ? 32 : 26,
-                  ),
+                  Icon(style['icon'] as IconData,
+                      color: Colors.white,
+                      size: isSelected ? 30 : 24),
                   const SizedBox(height: 8),
                   Text(
                     style['name'] as String,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                     ),
                   ),
                   if (isSelected)
-                    Container(
-                      margin: const EdgeInsets.only(top: 6),
-                      width: 20,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(2),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Container(
+                        width: 20,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
                 ],
@@ -416,18 +485,23 @@ class _UploadScreenState extends State<UploadScreen>
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.08),
+          color: AppTheme.accentWarm.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+          border: Border.all(
+              color: AppTheme.accentWarm.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
-            Icon(Icons.info_outline_rounded, color: Colors.orange.withValues(alpha: 0.7), size: 20),
-            const SizedBox(width: 12),
-            Expanded(
+            const Icon(Icons.info_outline_rounded,
+                color: AppTheme.accentWarm, size: 20),
+            const SizedBox(width: 10),
+            const Expanded(
               child: Text(
-                'Create a group first from the Groups tab to upload PDFs.',
-                style: TextStyle(color: Colors.orange.withValues(alpha: 0.8), fontSize: 13, height: 1.4),
+                'Create a group first, then upload PDFs into it.',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                ),
               ),
             ),
           ],
@@ -438,23 +512,42 @@ class _UploadScreenState extends State<UploadScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: AppTheme.surfaceHigh,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String?>(
           value: _selectedGroupId,
           isExpanded: true,
-          dropdownColor: const Color(0xFF1a1a2e),
-          hint: Text('Select a group',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.4))),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.white38),
-          items: groups.map((g) => DropdownMenuItem<String?>(
-                value: g.id,
-                child: Text(g.name, style: const TextStyle(color: Colors.white)),
-              )).toList(),
-          onChanged: (value) => setState(() => _selectedGroupId = value),
+          dropdownColor: AppTheme.surfaceHigh,
+          hint: const Text('Select a group',
+              style: TextStyle(color: AppTheme.textMuted)),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              color: AppTheme.textSecondary),
+          style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600),
+          items: groups
+              .map((g) => DropdownMenuItem<String?>(
+                    value: g.id,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.folder_rounded,
+                            color: AppTheme.primary, size: 18),
+                        const SizedBox(width: 10),
+                        Text(g.name,
+                            style: const TextStyle(
+                                color: AppTheme.textPrimary)),
+                      ],
+                    ),
+                  ))
+              .toList(),
+          onChanged: (value) {
+            HapticFeedback.selectionClick();
+            setState(() => _selectedGroupId = value);
+          },
         ),
       ),
     );
@@ -463,41 +556,41 @@ class _UploadScreenState extends State<UploadScreen>
   Widget _buildUploadStatus(ReelProvider reelProvider) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF667eea).withValues(alpha: 0.3)),
+        color: AppTheme.surfaceHigh,
+        borderRadius: BorderRadius.circular(18),
+        border:
+            Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
-          if (reelProvider.isGenerating && reelProvider.generatingTotal > 0) ...[
-            // Animated progress bar
+          if (reelProvider.isGenerating &&
+              reelProvider.generatingTotal > 0) ...[
             TweenAnimationBuilder<double>(
               tween: Tween(
                 begin: 0,
                 end: reelProvider.generatingTotal > 0
-                    ? reelProvider.generatingDone / reelProvider.generatingTotal
+                    ? reelProvider.generatingDone /
+                        reelProvider.generatingTotal
                     : 0.0,
               ),
               duration: const Duration(milliseconds: 500),
-              builder: (context, value, _) {
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: value,
-                    backgroundColor: Colors.white12,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF667eea)),
-                    minHeight: 8,
-                  ),
-                );
-              },
+              builder: (context, value, _) => ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: value,
+                  backgroundColor: Colors.white12,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppTheme.primary),
+                  minHeight: 8,
+                ),
+              ),
             ),
             const SizedBox(height: 16),
-          ] else if (reelProvider.totalPages > 0 && reelProvider.uploading) ...[
-            // Page processing progress bar
+          ] else if (reelProvider.totalPages > 0 &&
+              reelProvider.uploading) ...[
             TweenAnimationBuilder<double>(
               tween: Tween(
                 begin: 0,
@@ -506,24 +599,22 @@ class _UploadScreenState extends State<UploadScreen>
                     : 0.0,
               ),
               duration: const Duration(milliseconds: 500),
-              builder: (context, value, _) {
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: value,
-                    backgroundColor: Colors.white12,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF43e97b)),
-                    minHeight: 6,
-                  ),
-                );
-              },
+              builder: (context, value, _) => ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: value,
+                  backgroundColor: Colors.white12,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppTheme.success),
+                  minHeight: 8,
+                ),
+              ),
             ),
             const SizedBox(height: 10),
             Text(
               'Page ${reelProvider.currentPage} of ${reelProvider.totalPages}',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
                 fontSize: 12,
               ),
             ),
@@ -531,34 +622,32 @@ class _UploadScreenState extends State<UploadScreen>
           ] else if (reelProvider.uploading) ...[
             AnimatedBuilder(
               animation: _pulseController,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: 1.0 + (_pulseController.value * 0.1),
-                  child: const Icon(
-                    Icons.auto_awesome,
-                    color: Color(0xFF667eea),
-                    size: 36,
-                  ),
-                );
-              },
+              builder: (context, _) => Transform.scale(
+                scale: 1.0 + (_pulseController.value * 0.12),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: AppTheme.primary,
+                  size: 36,
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
           ],
           Text(
             reelProvider.uploadStatus ?? '',
             style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+              color: AppTheme.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
             textAlign: TextAlign.center,
           ),
           if (reelProvider.isGenerating) ...[
-            const SizedBox(height: 8),
-            Text(
-              'AI images will load as you view each reel',
+            const SizedBox(height: 6),
+            const Text(
+              'Reels unlock as each page is processed',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+                color: AppTheme.textMuted,
                 fontSize: 12,
               ),
             ),
@@ -571,21 +660,25 @@ class _UploadScreenState extends State<UploadScreen>
   Widget _buildError(ReelProvider reelProvider) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+        color: AppTheme.danger.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
-          const SizedBox(width: 12),
+          const Icon(Icons.error_outline_rounded,
+              color: AppTheme.danger, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               reelProvider.error!,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+              ),
             ),
           ),
         ],
@@ -600,16 +693,15 @@ class _UploadScreenState extends State<UploadScreen>
 
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 58,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: canUpload
-              ? const LinearGradient(
-                  colors: [Color(0xFF667eea), Color(0xFF764ba2)])
-              : null,
-          color: canUpload ? null : Colors.grey[850],
+          borderRadius: BorderRadius.circular(18),
+          gradient: canUpload ? AppTheme.primaryGradient : null,
+          color: canUpload ? null : AppTheme.surfaceHigh,
+          boxShadow:
+              canUpload ? AppTheme.glowShadow(AppTheme.primary) : null,
         ),
         child: ElevatedButton(
           onPressed: canUpload ? _upload : null,
@@ -618,24 +710,26 @@ class _UploadScreenState extends State<UploadScreen>
             shadowColor: Colors.transparent,
             foregroundColor: Colors.white,
             disabledBackgroundColor: Colors.transparent,
-            disabledForegroundColor: Colors.white38,
+            disabledForegroundColor: AppTheme.textMuted,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
             ),
             elevation: 0,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.auto_awesome, size: 20,
-                  color: canUpload ? Colors.white : Colors.white38),
+              Icon(Icons.auto_awesome_rounded,
+                  size: 20,
+                  color:
+                      canUpload ? Colors.white : AppTheme.textMuted),
               const SizedBox(width: 8),
               Text(
-                'Generate Reels',
+                'Generate reels',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: canUpload ? Colors.white : Colors.white38,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: canUpload ? Colors.white : AppTheme.textMuted,
                 ),
               ),
             ],

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/reel.dart';
 import '../providers/reel_provider.dart';
+import '../theme/app_theme.dart';
 import '../widgets/reel_card.dart';
 import '../widgets/video_reel_card.dart';
 import 'group_detail_screen.dart' show cleanPdfName;
@@ -23,33 +24,53 @@ class PdfReelsScreen extends StatefulWidget {
 }
 
 class _PdfReelsScreenState extends State<PdfReelsScreen> {
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
+  late final List<Reel> _sortedReels;
 
   @override
   void initState() {
     super.initState();
+
+    // Sort reels by page number ascending, then by creation order (stable)
+    _sortedReels = List<Reel>.from(widget.reels)
+      ..sort((a, b) {
+        final byPage = a.pageNumber.compareTo(b.pageNumber);
+        if (byPage != 0) return byPage;
+        return a.createdAt.compareTo(b.createdAt);
+      });
+
+    // Find first unsolved reel to resume from
+    final provider = context.read<ReelProvider>();
+    int startIndex = _sortedReels.indexWhere((r) => !provider.isSaved(r.id));
+    if (startIndex == -1) startIndex = 0; // all solved → start from beginning
+
+    _pageController = PageController(initialPage: startIndex);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.reels.isNotEmpty) {
-        final provider = context.read<ReelProvider>();
-        provider.trackView(widget.reels[0].id);
-        _preloadImages(0);
+      if (_sortedReels.isNotEmpty) {
+        provider.trackView(_sortedReels[startIndex].id);
+        _preloadImages(startIndex);
       }
     });
   }
 
   void _preloadImages(int currentIndex) {
-    for (int i = currentIndex + 1; i <= currentIndex + 5 && i < widget.reels.length; i++) {
-      final reel = widget.reels[i];
+    for (int i = currentIndex + 1;
+        i <= currentIndex + 5 && i < _sortedReels.length;
+        i++) {
+      final reel = _sortedReels[i];
       if (reel.type == 'video' && reel.scenes.isNotEmpty) {
         for (final scene in reel.scenes) {
           try {
-            precacheImage(CachedNetworkImageProvider(scene.imageUrl), context);
+            precacheImage(
+                CachedNetworkImageProvider(scene.imageUrl), context);
           } catch (_) {}
         }
       } else {
         for (final slide in reel.slides) {
           try {
-            precacheImage(CachedNetworkImageProvider(slide.imageUrl), context);
+            precacheImage(
+                CachedNetworkImageProvider(slide.imageUrl), context);
           } catch (_) {}
         }
       }
@@ -65,62 +86,119 @@ class _PdfReelsScreenState extends State<PdfReelsScreen> {
   @override
   Widget build(BuildContext context) {
     final reelProvider = context.watch<ReelProvider>();
+    final solvedCount =
+        _sortedReels.where((r) => reelProvider.isSaved(r.id)).length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0a0a1a),
+      backgroundColor: AppTheme.bg,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(
-          cleanPdfName(widget.pdfName),
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              cleanPdfName(widget.pdfName),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+            if (_sortedReels.isNotEmpty)
+              Text(
+                '$solvedCount of ${_sortedReels.length} solved',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+          ],
         ),
-        backgroundColor: Colors.black.withValues(alpha: 0.3),
+        backgroundColor: Colors.black.withValues(alpha: 0.35),
         elevation: 0,
       ),
-      body: widget.reels.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.auto_stories, size: 64, color: const Color(0xFF667eea).withValues(alpha: 0.5)),
-                  const SizedBox(height: 16),
-                  const Text('No reels available', style: TextStyle(color: Colors.white70, fontSize: 18)),
-                ],
-              ),
-            )
-          : PageView.builder(
-              controller: _pageController,
-              scrollDirection: Axis.vertical,
-              physics: const BouncingScrollPhysics(),
-              itemCount: widget.reels.length,
-              onPageChanged: (index) {
-                reelProvider.trackView(widget.reels[index].id);
-                _preloadImages(index);
-              },
-              itemBuilder: (context, index) {
-                final reel = widget.reels[index];
+      body: _sortedReels.isEmpty
+          ? _buildEmpty()
+          : Stack(
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  scrollDirection: Axis.vertical,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: _sortedReels.length,
+                  onPageChanged: (index) {
+                    reelProvider.trackView(_sortedReels[index].id);
+                    _preloadImages(index);
+                  },
+                  itemBuilder: (context, index) {
+                    final reel = _sortedReels[index];
 
-                if (reel.type == 'video' && reel.scenes.isNotEmpty) {
-                  return VideoReelCard(
-                    reel: reel,
-                    isLiked: reelProvider.isLiked(reel.id),
-                    isSaved: reelProvider.isSaved(reel.id),
-                    onLike: () => reelProvider.toggleLike(reel.id),
-                    onSave: () => reelProvider.toggleSave(reel.id),
-                    onShare: () => Share.share('Check out this reel: ${reel.title} on EduReels!'),
-                  );
-                }
+                    if (reel.type == 'video' && reel.scenes.isNotEmpty) {
+                      return VideoReelCard(
+                        reel: reel,
+                        isSaved: reelProvider.isSaved(reel.id),
+                        onSave: () => reelProvider.toggleSave(reel.id),
+                        onShare: () => Share.share(
+                            'Check out this reel: ${reel.title} on EduReels!'),
+                      );
+                    }
 
-                return ReelCard(
-                  reel: reel,
-                  isLiked: reelProvider.isLiked(reel.id),
-                  isSaved: reelProvider.isSaved(reel.id),
-                  onLike: () => reelProvider.toggleLike(reel.id),
-                  onSave: () => reelProvider.toggleSave(reel.id),
-                  onShare: () => Share.share('Check out this reel: ${reel.title} on EduReels!'),
-                );
-              },
+                    return ReelCard(
+                      reel: reel,
+                      isSaved: reelProvider.isSaved(reel.id),
+                      onSave: () => reelProvider.toggleSave(reel.id),
+                      onShare: () => Share.share(
+                          'Check out this reel: ${reel.title} on EduReels!'),
+                    );
+                  },
+                ),
+                // Thin top progress bar for overall "solved" progress
+                Positioned(
+                  top: 0, left: 0, right: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 50),
+                      child: LinearProgressIndicator(
+                        value: solvedCount / _sortedReels.length,
+                        minHeight: 2,
+                        backgroundColor: Colors.white12,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppTheme.success,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_stories_rounded,
+              size: 72, color: AppTheme.primary.withValues(alpha: 0.5)),
+          const SizedBox(height: 16),
+          const Text('No reels yet',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              )),
+          const SizedBox(height: 6),
+          const Text(
+            'Upload a PDF to generate reels for this group.',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }
